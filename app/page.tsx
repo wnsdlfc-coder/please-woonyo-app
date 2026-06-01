@@ -46,7 +46,7 @@ interface Message {
   readAt: { seconds?: number } | null;
   selfDestruct?: boolean;
 }
-interface Schedule { id: string; title: string; date: string; description?: string; createdBy?: string; roomId: string; }
+interface Schedule { id: string; title: string; date: string; endDate?: string; description?: string; createdBy?: string; roomId: string; }
 interface Bucketlist { id: string; roomId: string; region: string; regionName?: string; memo?: string; }
 
 export default function PageRoot() {

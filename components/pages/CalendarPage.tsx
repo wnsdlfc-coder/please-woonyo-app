@@ -40,6 +40,7 @@ interface Schedule {
   id: string;
   title: string;
   date: string;
+  endDate?: string;
   description?: string;
   createdBy?: string;
 }
@@ -79,6 +80,7 @@ export default function CalendarPage({
   // Schedule form
   const [schTitle, setSchTitle] = useState('');
   const [schDate, setSchDate] = useState(new Date().toISOString().split('T')[0]);
+  const [schEndDate, setSchEndDate] = useState('');
   const [schDesc, setSchDesc] = useState('');
 
   const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
@@ -102,8 +104,14 @@ export default function CalendarPage({
 
   const scheduleDatesMap: Record<string, Schedule[]> = {};
   allSchedules.forEach(s => {
-    if (!scheduleDatesMap[s.date]) scheduleDatesMap[s.date] = [];
-    scheduleDatesMap[s.date].push(s);
+    const cur = new Date(s.date + 'T00:00:00');
+    const end = new Date((s.endDate || s.date) + 'T00:00:00');
+    while (cur <= end) {
+      const key = cur.toISOString().split('T')[0];
+      if (!scheduleDatesMap[key]) scheduleDatesMap[key] = [];
+      scheduleDatesMap[key].push(s);
+      cur.setDate(cur.getDate() + 1);
+    }
   });
 
   const prevMonth = () => {
@@ -130,15 +138,18 @@ export default function CalendarPage({
 
   const handleSaveSch = async () => {
     if (!schTitle.trim() || !schDate) { showToast('제목과 날짜를 입력해주세요', true); return; }
+    if (schEndDate && schEndDate < schDate) { showToast('종료일이 시작일보다 앞서요', true); return; }
     await addDoc(collection(db, 'schedules'), {
-      title: schTitle, date: schDate,
+      title: schTitle,
+      date: schDate,
+      endDate: schEndDate || null,
       description: schDesc,
       createdBy: currentNick,
       roomId: currentCoupleCode,
       createdAt: serverTimestamp()
     });
     setShowSchModal(false);
-    setSchTitle(''); setSchDesc('');
+    setSchTitle(''); setSchDesc(''); setSchEndDate('');
     showToast('일정이 저장됐어요! 📋');
   };
 
@@ -363,7 +374,7 @@ export default function CalendarPage({
           </div>
           <div className="form-group">
             <label className="form-label">날짜</label>
-            <input type="date" className="form-input" value={anniDate} onChange={e => setAnniDate(e.target.value)} />
+            <input type="date" className="form-input" value={anniDate} onChange={e => setAnniDate(e.target.value)} style={{ fontSize: '14px' }} />
           </div>
           <div className="form-group">
             <label className="form-label">이모지</label>
@@ -390,8 +401,13 @@ export default function CalendarPage({
             <input type="text" className="form-input" placeholder="일정 제목" value={schTitle} onChange={e => setSchTitle(e.target.value)} />
           </div>
           <div className="form-group">
-            <label className="form-label">날짜</label>
-            <input type="date" className="form-input" value={schDate} onChange={e => setSchDate(e.target.value)} />
+            <label className="form-label">기간</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input type="date" className="form-input" value={schDate} onChange={e => setSchDate(e.target.value)} style={{ flex: 1, minWidth: 0, fontSize: '14px' }} />
+              <span style={{ fontSize: '12px', color: 'var(--text3)', flexShrink: 0 }}>~</span>
+              <input type="date" className="form-input" value={schEndDate} min={schDate} onChange={e => setSchEndDate(e.target.value)} style={{ flex: 1, minWidth: 0, fontSize: '14px' }} placeholder="종료일 (선택)" />
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '4px' }}>하루 일정이면 종료일 생략 가능</div>
           </div>
           <div className="form-group">
             <label className="form-label">내용 (선택)</label>

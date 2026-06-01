@@ -521,7 +521,7 @@ export default function MyPage({
               <span style={{ opacity: 0.4, fontSize: '12px' }}>{tabMenuOpen ? '▲' : '▼'}</span>
             </button>
             {tabMenuOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: '10px', zIndex: 200, overflowY: 'auto', maxHeight: '55vh', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
+              <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: '10px', zIndex: 200, overflowY: 'auto', maxHeight: '50vh', boxShadow: '0 -4px 20px rgba(0,0,0,0.12)' }}>
                 {TAB_LIST.map(([tab, label]) => (
                   <button key={tab} onClick={() => { setMyTab(tab); setTabMenuOpen(false); }}
                     style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--border)', background: myTab === tab ? 'var(--rose4)' : 'white', color: myTab === tab ? 'var(--rose)' : 'var(--text)', fontWeight: myTab === tab ? 800 : 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px' }}>
