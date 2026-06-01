@@ -58,6 +58,7 @@ export default function PageRoot() {
   const [members, setMembers] = useState<string[]>([]);
   const [activeMyTab, setActiveMyTab] = useState('received');
 
+  const [roomTitle, setRoomTitle] = useState('우리의 방');
   const [allRequests, setAllRequests] = useState<Request[]>([]);
   const [allPlaces, setAllPlaces] = useState<Place[]>([]);
   const [allDiaries, setAllDiaries] = useState<Diary[]>([]);
@@ -153,7 +154,9 @@ export default function PageRoot() {
     if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
     kickListenerRef.current = onSnapshot(doc(db, 'rooms', code), snap => {
       if (snap.exists()) {
-        const kicked: string[] = snap.data().kickedMembers || [];
+        const data = snap.data();
+        setRoomTitle(data.title || '우리의 방');
+        const kicked: string[] = data.kickedMembers || [];
         if (kicked.includes(nick)) {
           unsubscribersRef.current.forEach(u => u()); unsubscribersRef.current = [];
           if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
@@ -264,7 +267,7 @@ export default function PageRoot() {
 
   return (
     <>
-      <AppBar currentNick={currentNick} onLogout={handleLogout} />
+      <AppBar currentNick={currentNick} onLogout={handleLogout} roomTitle={roomTitle} />
       <main>
         {activePage === 'home' && (
           <Home

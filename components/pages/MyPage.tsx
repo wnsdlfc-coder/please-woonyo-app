@@ -199,7 +199,19 @@ export default function MyPage({
   };
 
   const handleAccept = async (id: string) => {
+    const req = allRequests.find(r => r.id === id);
     await updateDoc(doc(db, 'requests', id), { status: '수락' });
+    if (req) {
+      await addDoc(collection(db, 'schedules'), {
+        title: `${req.theme} · ${req.region}`,
+        date: req.date,
+        description: req.time || '',
+        createdBy: 'auto',
+        roomId: currentCoupleCode,
+        createdAt: serverTimestamp(),
+        fromRequest: id,
+      });
+    }
     showToast('수락했어요! 💕');
   };
   const handleReject = (id: string) => {
@@ -428,7 +440,7 @@ export default function MyPage({
             <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text)', marginBottom: '2px' }}>{currentNick}</div>
             <div style={{ fontSize: '11px', color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email || '(이메일 없음)'}</div>
           </div>
-          <button className="btn btn-outline btn-xs" style={{ flexShrink: 0 }} onClick={() => { setChangeNickOpen(v => !v); setNickErr(''); setNewNick(currentNick); }}>닉변경</button>
+          <button className="btn btn-outline btn-xs" style={{ flexShrink: 0 }} onClick={() => { setChangeNickOpen(v => !v); setNickErr(''); setNewNick(currentNick); }}>닉네임 변경</button>
         </div>
         {changeNickOpen && (
           <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
@@ -512,30 +524,29 @@ export default function MyPage({
 
       {/* 카테고리 그리드 */}
       {(() => {
-        const CATS: { tab: MyTab; label: string; emoji: string; count: number | null }[] = [
-          { tab: 'received', label: '받은 신청', emoji: '💌', count: allRequests.filter(r => r.toUser === currentNick).length },
-          { tab: 'sent',     label: '보낸 신청', emoji: '📤', count: allRequests.filter(r => r.fromUser === currentNick).length },
-          { tab: 'dates',    label: '데이트 기록', emoji: '💕', count: allRequests.filter(r => r.status === '수락').length },
-          { tab: 'diaries',  label: '일기',     emoji: '📔', count: allDiaries.length },
-          { tab: 'stats',    label: '통계',     emoji: '📊', count: null },
+        const CATS: { tab: MyTab; label: string; count: number | null }[] = [
+          { tab: 'received', label: '받은 신청', count: allRequests.filter(r => r.toUser === currentNick).length },
+          { tab: 'sent',     label: '보낸 신청', count: allRequests.filter(r => r.fromUser === currentNick).length },
+          { tab: 'dates',    label: '데이트 기록', count: allRequests.filter(r => r.status === '수락').length },
+          { tab: 'diaries',  label: '일기',     count: allDiaries.length },
+          { tab: 'stats',    label: '통계',     count: null },
         ];
         return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
-            {CATS.map(({ tab, label, emoji, count }) => (
+            {CATS.map(({ tab, label, count }) => (
               <button
                 key={tab}
                 onClick={() => { setMyTab(tab); setMyFilter('전체'); setContentModalOpen(true); }}
                 style={{
-                  padding: '14px 8px', borderRadius: '14px',
+                  padding: '16px 8px', borderRadius: '14px',
                   border: '1.5px solid var(--border)',
                   background: 'white', cursor: 'pointer', fontFamily: 'inherit',
                   textAlign: 'center', transition: 'all 0.15s',
                 }}
               >
-                <div style={{ fontSize: '24px', marginBottom: '5px', lineHeight: 1 }}>{emoji}</div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', marginBottom: '3px' }}>{label}</div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)', marginBottom: '6px' }}>{label}</div>
                 {count !== null && (
-                  <div style={{ fontSize: '13px', fontWeight: 900, color: count > 0 ? 'var(--rose)' : 'var(--text3)' }}>{count}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 900, color: count > 0 ? 'var(--rose)' : 'var(--text3)' }}>{count}</div>
                 )}
               </button>
             ))}

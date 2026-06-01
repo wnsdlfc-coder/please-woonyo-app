@@ -43,6 +43,7 @@ interface Schedule {
   endDate?: string;
   description?: string;
   createdBy?: string;
+  fromRequest?: string;
 }
 
 interface CalendarPageProps {

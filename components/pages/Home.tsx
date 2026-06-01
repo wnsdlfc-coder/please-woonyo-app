@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { getGreeting, getDday } from '@/lib/utils';
 
 interface Request {
@@ -100,7 +100,19 @@ export default function Home({
   const latestMsg = allMessages.length > 0 ? allMessages[allMessages.length - 1] : null;
 
   const handleAccept = async (id: string) => {
+    const req = allRequests.find(r => r.id === id);
     await updateDoc(doc(db, 'requests', id), { status: '수락' });
+    if (req) {
+      await addDoc(collection(db, 'schedules'), {
+        title: `${req.theme} · ${req.region}`,
+        date: req.date,
+        description: req.time || '',
+        createdBy: 'auto',
+        roomId: currentCoupleCode,
+        createdAt: serverTimestamp(),
+        fromRequest: id,
+      });
+    }
     showToast('수락했어요! 💕');
   };
   const handleReject = (id: string) => {
