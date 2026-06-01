@@ -76,6 +76,7 @@ export default function CalendarPage({
   const [anniDate, setAnniDate] = useState('');
   const [anniEmoji, setAnniEmoji] = useState('🎂');
   const [anniRepeat, setAnniRepeat] = useState(false);
+  const [editAnniId, setEditAnniId] = useState<string | null>(null);
 
   // Schedule form
   const [schTitle, setSchTitle] = useState('');
@@ -125,15 +126,30 @@ export default function CalendarPage({
 
   const handleSaveAnni = async () => {
     if (!anniName.trim() || !anniDate) { showToast('이름과 날짜를 입력해주세요', true); return; }
-    await addDoc(collection(db, 'anniversaries'), {
-      name: anniName, date: anniDate,
-      emoji: anniEmoji || '🎂',
-      repeat: anniRepeat,
-      coupleCode: currentCoupleCode, createdAt: serverTimestamp()
-    });
+    if (editAnniId) {
+      await updateDoc(doc(db, 'anniversaries', editAnniId), {
+        name: anniName, date: anniDate, emoji: anniEmoji || '🎂', repeat: anniRepeat,
+      });
+      showToast('기념일이 수정됐어요! ✏️');
+    } else {
+      await addDoc(collection(db, 'anniversaries'), {
+        name: anniName, date: anniDate, emoji: anniEmoji || '🎂',
+        repeat: anniRepeat, coupleCode: currentCoupleCode, createdAt: serverTimestamp()
+      });
+      showToast('기념일이 저장됐어요! 🎂');
+    }
     setShowAnniModal(false);
+    setEditAnniId(null);
     setAnniName(''); setAnniDate(''); setAnniEmoji('🎂'); setAnniRepeat(false);
-    showToast('기념일이 저장됐어요! 🎂');
+  };
+
+  const handleEditAnni = (a: Anniversary) => {
+    setEditAnniId(a.id);
+    setAnniName(a.name);
+    setAnniDate(a.date);
+    setAnniEmoji(a.emoji || '🎂');
+    setAnniRepeat(a.repeat);
+    setShowAnniModal(true);
   };
 
   const handleSaveSch = async () => {
@@ -351,23 +367,30 @@ export default function CalendarPage({
       </div>
 
       <div className="section-label">기념일</div>
-      {allAnniversaries.length ? allAnniversaries.map(a => (
-        <div key={a.id} className="anni-card">
-          <div className="anni-icon">{a.emoji}</div>
-          <div style={{ flex: 1 }}>
-            <div className="anni-name">{a.name}</div>
-            <div className="anni-date">{a.date}{a.repeat ? ' · 매년' : ''}</div>
-          </div>
-          <div className="anni-dday">{getDday(a.date, a.repeat)}</div>
-          <button className="btn btn-outline btn-xs" style={{ marginLeft: '8px' }} onClick={() => handleDeleteAnni(a.id)}>삭제</button>
+      {allAnniversaries.length ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          {allAnniversaries.map(a => (
+            <div key={a.id} style={{ background: 'white', borderRadius: '14px', padding: '12px 14px', border: '1px solid var(--border)', position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                <span style={{ fontSize: '24px', lineHeight: 1 }}>{a.emoji}</span>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  <button onClick={() => handleEditAnni(a)} style={{ background: 'none', border: 'none', fontSize: '13px', cursor: 'pointer', color: 'var(--text3)', padding: '2px 5px', borderRadius: '4px' }}>✏️</button>
+                  <button onClick={() => handleDeleteAnni(a.id)} style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: 'var(--text3)', padding: '2px 5px', borderRadius: '4px', lineHeight: 1 }}>×</button>
+                </div>
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+              <div style={{ fontSize: '10px', color: 'var(--text3)', marginBottom: '6px' }}>{a.date}{a.repeat ? ' · 매년' : ''}</div>
+              <div style={{ fontSize: '18px', fontWeight: 900, color: 'var(--rose)' }}>{getDday(a.date, a.repeat)}</div>
+            </div>
+          ))}
         </div>
-      )) : <div className="empty-state">기념일을 추가해봐요 🎂</div>}
+      ) : <div className="empty-state">기념일을 추가해봐요 🎂</div>}
 
-      {/* 기념일 추가 모달 */}
-      <div className={'modal-bg' + (showAnniModal ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) setShowAnniModal(false); }}>
+      {/* 기념일 추가/수정 모달 */}
+      <div className={'modal-bg' + (showAnniModal ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) { setShowAnniModal(false); setEditAnniId(null); setAnniName(''); setAnniDate(''); setAnniEmoji('🎂'); setAnniRepeat(false); } }}>
         <div className="modal">
           <div className="modal-bar" />
-          <div className="modal-title">기념일 추가 🎂</div>
+          <div className="modal-title">{editAnniId ? '기념일 수정 ✏️' : '기념일 추가 🎂'}</div>
           <div className="form-group">
             <label className="form-label">기념일 이름</label>
             <input type="text" className="form-input" placeholder="예) 100일, 첫 만남" value={anniName} onChange={e => setAnniName(e.target.value)} />
@@ -385,8 +408,8 @@ export default function CalendarPage({
             <label htmlFor="anni-repeat-ck" style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text2)', cursor: 'pointer' }}>매년 반복</label>
           </div>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn btn-outline btn-full" onClick={() => setShowAnniModal(false)}>취소</button>
-            <button className="btn btn-rose btn-full" onClick={handleSaveAnni}>저장</button>
+            <button className="btn btn-outline btn-full" onClick={() => { setShowAnniModal(false); setEditAnniId(null); setAnniName(''); setAnniDate(''); setAnniEmoji('🎂'); setAnniRepeat(false); }}>취소</button>
+            <button className="btn btn-rose btn-full" onClick={handleSaveAnni}>{editAnniId ? '수정' : '저장'}</button>
           </div>
         </div>
       </div>

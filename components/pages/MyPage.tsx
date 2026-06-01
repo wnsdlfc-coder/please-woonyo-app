@@ -71,8 +71,8 @@ export default function MyPage({
   const [nickErr, setNickErr] = useState('');
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
-  // 햄버거 탭 메뉴
-  const [tabMenuOpen, setTabMenuOpen] = useState(false);
+  // 카테고리 모달
+  const [contentModalOpen, setContentModalOpen] = useState(false);
   // 커플코드 표시 여부
   const [codeVisible, setCodeVisible] = useState(false);
 
@@ -90,7 +90,14 @@ export default function MyPage({
   const [newRoomCode, setNewRoomCode] = useState('');
   const [newRoomNick, setNewRoomNick] = useState(currentNick);
 
-  useEffect(() => { setMyTab((activeMyTab as MyTab) || 'received'); }, [activeMyTab]);
+  useEffect(() => {
+    const tab = (activeMyTab as MyTab) || 'received';
+    setMyTab(tab);
+    // 외부(홈 등)에서 탭 지정 시 모달 자동 열기
+    if (activeMyTab && activeMyTab !== 'received') {
+      setContentModalOpen(true);
+    }
+  }, [activeMyTab]);
   useEffect(() => { loadRoomInfo(); }, [currentCoupleCode, currentNick]); // eslint-disable-line
 
 
@@ -503,46 +510,61 @@ export default function MyPage({
         </div>
       </div>
 
-      {/* 햄버거 탭 메뉴 */}
+      {/* 카테고리 그리드 */}
       {(() => {
-        const TAB_LIST: [MyTab, string][] = [
-          ['received', '받은 신청'], ['sent', '보낸 신청'],
-          ['dates', '데이트 기록'], ['diaries', '일기'], ['stats', '통계'],
+        const CATS: { tab: MyTab; label: string; emoji: string; count: number | null }[] = [
+          { tab: 'received', label: '받은 신청', emoji: '💌', count: allRequests.filter(r => r.toUser === currentNick).length },
+          { tab: 'sent',     label: '보낸 신청', emoji: '📤', count: allRequests.filter(r => r.fromUser === currentNick).length },
+          { tab: 'dates',    label: '데이트 기록', emoji: '💕', count: allRequests.filter(r => r.status === '수락').length },
+          { tab: 'diaries',  label: '일기',     emoji: '📔', count: allDiaries.length },
+          { tab: 'stats',    label: '통계',     emoji: '📊', count: null },
         ];
-        const currentLabel = TAB_LIST.find(([t]) => t === myTab)?.[1] || '';
         return (
-          <div style={{ position: 'relative', marginBottom: '16px' }}>
-            <button
-              onClick={() => setTabMenuOpen(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid var(--border)', background: 'white', cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}
-            >
-              <span style={{ fontSize: '16px' }}>☰</span>
-              <span style={{ flex: 1, textAlign: 'left', color: 'var(--rose)' }}>{currentLabel}</span>
-              <span style={{ opacity: 0.4, fontSize: '12px' }}>{tabMenuOpen ? '▲' : '▼'}</span>
-            </button>
-            {tabMenuOpen && (
-              <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: '10px', zIndex: 200, overflowY: 'auto', maxHeight: '50vh', boxShadow: '0 -4px 20px rgba(0,0,0,0.12)' }}>
-                {TAB_LIST.map(([tab, label]) => (
-                  <button key={tab} onClick={() => { setMyTab(tab); setTabMenuOpen(false); }}
-                    style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--border)', background: myTab === tab ? 'var(--rose4)' : 'white', color: myTab === tab ? 'var(--rose)' : 'var(--text)', fontWeight: myTab === tab ? 800 : 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px' }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+            {CATS.map(({ tab, label, emoji, count }) => (
+              <button
+                key={tab}
+                onClick={() => { setMyTab(tab); setMyFilter('전체'); setContentModalOpen(true); }}
+                style={{
+                  padding: '14px 8px', borderRadius: '14px',
+                  border: '1.5px solid var(--border)',
+                  background: 'white', cursor: 'pointer', fontFamily: 'inherit',
+                  textAlign: 'center', transition: 'all 0.15s',
+                }}
+              >
+                <div style={{ fontSize: '24px', marginBottom: '5px', lineHeight: 1 }}>{emoji}</div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text)', marginBottom: '3px' }}>{label}</div>
+                {count !== null && (
+                  <div style={{ fontSize: '13px', fontWeight: 900, color: count > 0 ? 'var(--rose)' : 'var(--text3)' }}>{count}</div>
+                )}
+              </button>
+            ))}
           </div>
         );
       })()}
 
-      {(myTab === 'received' || myTab === 'sent') && (
-        <div className="filter-row">
-          {(['전체', '대기', '수락', '반려'] as FilterType[]).map(f => (
-            <button key={f} className={'filter-btn' + (myFilter === f ? ' active' : '')} onClick={() => setMyFilter(f)}>{f}</button>
-          ))}
+      {/* 카테고리 콘텐츠 모달 */}
+      {contentModalOpen && (
+        <div className="modal-bg open" onClick={e => { if (e.target === e.currentTarget) setContentModalOpen(false); }}>
+          <div className="modal" style={{ maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-bar" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+              <div className="modal-title" style={{ margin: 0 }}>
+                {{ received: '💌 받은 신청', sent: '📤 보낸 신청', dates: '💕 데이트 기록', diaries: '📔 일기', stats: '📊 통계' }[myTab]}
+              </div>
+              <button onClick={() => setContentModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text3)', padding: '0 4px', lineHeight: 1 }}>×</button>
+            </div>
+            {(myTab === 'received' || myTab === 'sent') && (
+              <div className="filter-row" style={{ marginBottom: '12px' }}>
+                {(['전체', '대기', '수락', '반려'] as FilterType[]).map(f => (
+                  <button key={f} className={'filter-btn' + (myFilter === f ? ' active' : '')} onClick={() => setMyFilter(f)}>{f}</button>
+                ))}
+              </div>
+            )}
+            <div style={{ flex: 1, overflowY: 'auto' }}>{renderContent()}</div>
+          </div>
         </div>
       )}
-
-      <div id="my-content">{renderContent()}</div>
 
       {/* 다른 방 입장 모달 */}
       <div className={'modal-bg' + (showJoinOtherModal ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) setShowJoinOtherModal(false); }}>
