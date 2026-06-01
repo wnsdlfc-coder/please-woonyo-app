@@ -2,9 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import {
-  onAuthStateChanged, signOut
-} from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
   collection, doc, setDoc, getDoc, getDocs,
   onSnapshot, query, where, serverTimestamp, updateDoc, addDoc, deleteDoc
@@ -41,7 +39,12 @@ interface Diary {
   coupleCode: string;
 }
 interface Anniversary { id: string; name: string; date: string; emoji: string; repeat: boolean; coupleCode: string; }
-interface Note { id: string; fromUser: string; toUser: string; text: string; read: boolean; coupleCode: string; createdAt?: { toDate?: () => Date; seconds?: number }; }
+interface Message {
+  id: string; fromUser: string; coupleCode: string; text: string;
+  createdAt: { seconds?: number } | null;
+  readAt: { seconds?: number } | null;
+  selfDestruct: boolean;
+}
 interface Schedule { id: string; title: string; date: string; description?: string; createdBy?: string; roomId: string; }
 interface Bucketlist { id: string; roomId: string; region: string; regionName?: string; createdBy?: string; createdAt?: { toDate?: () => Date; seconds?: number }; memo?: string; }
 
@@ -54,21 +57,18 @@ export default function PageRoot() {
   const [members, setMembers] = useState<string[]>([]);
   const [activeMyTab, setActiveMyTab] = useState('received');
 
-  // All data
   const [allRequests, setAllRequests] = useState<Request[]>([]);
   const [allPlaces, setAllPlaces] = useState<Place[]>([]);
   const [allDiaries, setAllDiaries] = useState<Diary[]>([]);
   const [allAnniversaries, setAllAnniversaries] = useState<Anniversary[]>([]);
-  const [allNotes, setAllNotes] = useState<Note[]>([]);
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
   const [allBucketlist, setAllBucketlist] = useState<Bucketlist[]>([]);
 
-  // Confirm modal
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState('');
   const confirmCbRef = useRef<(() => void) | null>(null);
 
-  // Toast
   const { toast, showToast } = useToast();
 
   // Diary modal
@@ -83,10 +83,6 @@ export default function PageRoot() {
   // Diary shortcut modal
   const [diaryShortcutOpen, setDiaryShortcutOpen] = useState(false);
   const [diaryShortcutCustomDate, setDiaryShortcutCustomDate] = useState('');
-
-  // Note modal
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
-  const [noteContent, setNoteContent] = useState('');
 
   const unsubscribersRef = useRef<(() => void)[]>([]);
   const kickListenerRef = useRef<(() => void) | null>(null);
@@ -111,46 +107,37 @@ export default function PageRoot() {
     unsubscribersRef.current = [];
 
     const u1 = onSnapshot(query(collection(db, 'requests'), where('coupleCode', '==', code)), snap => {
-      setAllRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as Request)
-      ).sort((a, b) => {
+      setAllRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as Request)).sort((a, b) => {
         const aTs = (a as unknown as { createdAt?: { seconds?: number } }).createdAt?.seconds || 0;
         const bTs = (b as unknown as { createdAt?: { seconds?: number } }).createdAt?.seconds || 0;
         return bTs - aTs;
       }));
     });
     const u2 = onSnapshot(query(collection(db, 'places'), where('coupleCode', '==', code)), snap => {
-      setAllPlaces(snap.docs.map(d => ({ id: d.id, ...d.data() } as Place)
-      ).sort((a, b) => {
+      setAllPlaces(snap.docs.map(d => ({ id: d.id, ...d.data() } as Place)).sort((a, b) => {
         const aTs = (a as unknown as { createdAt?: { seconds?: number } }).createdAt?.seconds || 0;
         const bTs = (b as unknown as { createdAt?: { seconds?: number } }).createdAt?.seconds || 0;
         return bTs - aTs;
       }));
     });
     const u3 = onSnapshot(query(collection(db, 'diaries'), where('coupleCode', '==', code)), snap => {
-      setAllDiaries(snap.docs.map(d => ({ id: d.id, ...d.data() } as Diary))
-        .sort((a, b) => (b.date || '').localeCompare(a.date || '')));
+      setAllDiaries(snap.docs.map(d => ({ id: d.id, ...d.data() } as Diary)).sort((a, b) => (b.date || '').localeCompare(a.date || '')));
     });
     const u4 = onSnapshot(query(collection(db, 'anniversaries'), where('coupleCode', '==', code)), snap => {
-      setAllAnniversaries(snap.docs.map(d => ({ id: d.id, ...d.data() } as Anniversary))
-        .sort((a, b) => (a.date || '').localeCompare(b.date || '')));
+      setAllAnniversaries(snap.docs.map(d => ({ id: d.id, ...d.data() } as Anniversary)).sort((a, b) => (a.date || '').localeCompare(b.date || '')));
     });
-    const u5 = onSnapshot(query(collection(db, 'notes'), where('coupleCode', '==', code)), snap => {
-      setAllNotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as Note))
-        .sort((a, b) => ((b.createdAt as { seconds?: number })?.seconds || 0) - ((a.createdAt as { seconds?: number })?.seconds || 0)));
+    const u5 = onSnapshot(query(collection(db, 'messages'), where('coupleCode', '==', code)), snap => {
+      setAllMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as Message)).sort((a, b) => ((a.createdAt as { seconds?: number })?.seconds || 0) - ((b.createdAt as { seconds?: number })?.seconds || 0)));
     });
     const u6 = onSnapshot(query(collection(db, 'schedules'), where('roomId', '==', code)), snap => {
-      setAllSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() } as Schedule))
-        .sort((a, b) => (a.date || '').localeCompare(b.date || '')));
+      setAllSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() } as Schedule)).sort((a, b) => (a.date || '').localeCompare(b.date || '')));
     });
     const u7 = onSnapshot(query(collection(db, 'bucketlist'), where('roomId', '==', code)), snap => {
       const seenBucket = new Map<string, string>();
       snap.docs.forEach(d => {
         const key = d.data().regionName || d.data().region || d.id;
-        if (seenBucket.has(key)) {
-          deleteDoc(doc(db, 'bucketlist', d.id)).catch(() => {});
-        } else {
-          seenBucket.set(key, d.id);
-        }
+        if (seenBucket.has(key)) { deleteDoc(doc(db, 'bucketlist', d.id)).catch(() => {}); }
+        else { seenBucket.set(key, d.id); }
       });
       setAllBucketlist(snap.docs
         .filter((d, idx, arr) => arr.findIndex(x => (x.data().regionName || x.data().region) === (d.data().regionName || d.data().region)) === idx)
@@ -206,9 +193,7 @@ export default function PageRoot() {
         const savedNick = localStorage.getItem('nick_' + user.uid);
         const savedCouple = localStorage.getItem('couple_' + user.uid);
         if (savedNick && savedCouple) {
-          setDoc(doc(db, 'users', user.uid), {
-            uid: user.uid, nickname: savedNick, coupleCode: savedCouple, updatedAt: serverTimestamp()
-          }, { merge: true }).catch(() => {});
+          setDoc(doc(db, 'users', user.uid), { uid: user.uid, nickname: savedNick, coupleCode: savedCouple, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
           setDoc(doc(db, 'rooms', savedCouple), { members: arrayUnion(user.uid) }, { merge: true }).catch(() => {});
           enterApp(user, savedNick, savedCouple);
         } else {
@@ -236,13 +221,8 @@ export default function PageRoot() {
     if (!currentUser) return;
     const email = currentUser.email || '';
     const photoURL = currentUser.photoURL || '';
-    await setDoc(doc(db, 'users', currentUser.uid), {
-      uid: currentUser.uid, nickname: nick, coupleCode: code,
-      email, photoURL, updatedAt: serverTimestamp(), kicked: false,
-    }, { merge: true });
-    await setDoc(doc(db, 'users', nick), {
-      uid: currentUser.uid, nickname: nick, coupleCode: code, email, photoURL, kicked: false,
-    }, { merge: true });
+    await setDoc(doc(db, 'users', currentUser.uid), { uid: currentUser.uid, nickname: nick, coupleCode: code, email, photoURL, updatedAt: serverTimestamp(), kicked: false }, { merge: true });
+    await setDoc(doc(db, 'users', nick), { uid: currentUser.uid, nickname: nick, coupleCode: code, email, photoURL, kicked: false }, { merge: true });
     await setDoc(doc(db, 'rooms', code), { members: arrayUnion(currentUser.uid) }, { merge: true });
     localStorage.setItem('nick_' + currentUser.uid, nick);
     localStorage.setItem('couple_' + currentUser.uid, code);
@@ -280,29 +260,19 @@ export default function PageRoot() {
     setActivePage('my');
   };
 
-  const handleSendNote = async () => {
-    if (!noteContent.trim()) { showToast('내용을 입력해주세요', true); return; }
-    const toUser = allRequests.find(r => r.fromUser === currentNick)?.toUser
-      || allRequests.find(r => r.toUser === currentNick)?.fromUser
-      || '상대방';
-    await addDoc(collection(db, 'notes'), {
-      fromUser: currentNick, toUser, text: noteContent.trim(), read: false,
-      coupleCode: currentCoupleCode, createdAt: serverTimestamp()
+  const handleSendMessage = useCallback(async (text: string, selfDestruct: boolean) => {
+    await addDoc(collection(db, 'messages'), {
+      fromUser: currentNick,
+      coupleCode: currentCoupleCode,
+      text,
+      createdAt: serverTimestamp(),
+      readAt: null,
+      selfDestruct,
     });
-    setNoteContent('');
-    setNoteModalOpen(false);
-    showToast('쪽지를 보냈어요 💌');
-  };
+  }, [currentNick, currentCoupleCode]);
 
-  const handleMarkNotesRead = useCallback(() => {
-    allNotes.filter(n => n.toUser === currentNick && !n.read).forEach(n => {
-      updateDoc(doc(db, 'notes', n.id), { read: true }).catch(() => {});
-    });
-  }, [allNotes, currentNick]);
+  const unreadMsgCount = allMessages.filter(m => m.fromUser !== currentNick && !m.readAt).length;
 
-  const unreadNoteCount = allNotes.filter(n => n.toUser === currentNick && !n.read).length;
-
-  // Today's accepted dates missing diaries
   const todayStr = new Date().toISOString().split('T')[0];
   const pastAccepted = allRequests.filter(r => (r.status === '수락' || r.status === 'accepted') && r.date <= todayStr).sort((a, b) => b.date.localeCompare(a.date));
   const noDiary = pastAccepted.filter(r => !allDiaries.some(d => d.reqId === r.id || d.date === r.date));
@@ -314,11 +284,7 @@ export default function PageRoot() {
       </div>
     );
   }
-
-  if (authState === 'login') {
-    return <AuthScreen onAuthSuccess={() => {}} />;
-  }
-
+  if (authState === 'login') return <AuthScreen onAuthSuccess={() => {}} />;
   if (authState === 'couple') {
     if (!currentUser) return <AuthScreen onAuthSuccess={() => {}} />;
     return (
@@ -329,8 +295,6 @@ export default function PageRoot() {
       />
     );
   }
-
-  // App state
   if (!currentUser) return null;
 
   return (
@@ -342,14 +306,10 @@ export default function PageRoot() {
             currentNick={currentNick}
             allRequests={allRequests}
             allDiaries={allDiaries}
-            allNotes={allNotes}
-            onNavigate={page => {
-              setActivePage(page);
-            }}
-            onOpenDiaryShortcut={() => {
-              setDiaryShortcutCustomDate(todayStr);
-              setDiaryShortcutOpen(true);
-            }}
+            allMessages={allMessages}
+            allAnniversaries={allAnniversaries}
+            onNavigate={page => setActivePage(page)}
+            onOpenDiaryShortcut={() => { setDiaryShortcutCustomDate(todayStr); setDiaryShortcutOpen(true); }}
             showToast={showToast}
             showConfirm={showConfirm}
             onSwitchMyTab={tab => { setActiveMyTab(tab); setActivePage('my'); }}
@@ -396,7 +356,7 @@ export default function PageRoot() {
             currentCoupleCode={currentCoupleCode}
             allRequests={allRequests}
             allDiaries={allDiaries}
-            allNotes={allNotes}
+            allMessages={allMessages}
             allPlaces={allPlaces}
             activeMyTab={activeMyTab}
             onChangeNick={newNick => setCurrentNick(newNick)}
@@ -404,8 +364,7 @@ export default function PageRoot() {
             showToast={showToast}
             showConfirm={showConfirm}
             onOpenDiary={handleOpenDiary}
-            onOpenNoteModal={() => setNoteModalOpen(true)}
-            onMarkNotesRead={handleMarkNotesRead}
+            onSendMessage={handleSendMessage}
           />
         )}
       </main>
@@ -415,7 +374,7 @@ export default function PageRoot() {
           setActivePage(page);
           if (page !== 'my') setActiveMyTab('received');
         }}
-        unreadNoteCount={unreadNoteCount}
+        unreadMsgCount={unreadMsgCount}
       />
 
       {/* Diary Modal */}
@@ -459,12 +418,8 @@ export default function PageRoot() {
             {pastAccepted.length ? [...noDiary, ...pastAccepted.filter(r => allDiaries.some(d => d.reqId === r.id || d.date === r.date))].map(r => {
               const written = allDiaries.some(d => d.reqId === r.id || d.date === r.date);
               return (
-                <div
-                  key={r.id}
-                  className="card"
-                  style={{ marginBottom: '8px', cursor: 'pointer', borderLeft: `3px solid ${written ? '#DCEDC8' : 'var(--rose)'}` }}
-                  onClick={() => { setDiaryShortcutOpen(false); handleOpenDiary(r.id, r.date); }}
-                >
+                <div key={r.id} className="card" style={{ marginBottom: '8px', cursor: 'pointer', borderLeft: `3px solid ${written ? '#DCEDC8' : 'var(--rose)'}` }}
+                  onClick={() => { setDiaryShortcutOpen(false); handleOpenDiary(r.id, r.date); }}>
                   <div style={{ fontWeight: 700, fontSize: '14px' }}>{r.date} · {r.region}</div>
                   <div style={{ fontSize: '13px', color: 'var(--text2)' }}>{r.theme}</div>
                   <div style={{ fontSize: '12px', marginTop: '4px', color: written ? '#8BC34A' : 'var(--rose)' }}>{written ? '✓ 일기 있음' : '📔 일기 없음'}</div>
@@ -485,33 +440,13 @@ export default function PageRoot() {
         </div>
       </div>
 
-      {/* Note Modal */}
-      <div className={'modal-bg' + (noteModalOpen ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) setNoteModalOpen(false); }}>
-        <div className="modal">
-          <div className="modal-bar" />
-          <div className="modal-title">쪽지 보내기 💌</div>
-          <div className="form-group">
-            <label className="form-label">내용 (최대 100자)</label>
-            <textarea className="form-input" placeholder="하고 싶은 말을 적어봐요..." maxLength={100} style={{ minHeight: '80px' }} value={noteContent} onChange={e => setNoteContent(e.target.value)} />
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn btn-outline btn-full" onClick={() => setNoteModalOpen(false)}>취소</button>
-            <button className="btn btn-rose btn-full" onClick={handleSendNote}>보내기 💕</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Confirm Modal */}
       <ConfirmModal
         open={confirmOpen}
         message={confirmMsg}
         onOk={() => { setConfirmOpen(false); confirmCbRef.current?.(); }}
         onCancel={() => setConfirmOpen(false)}
       />
-
-      {/* Toast */}
       <Toast message={toast.message} isError={toast.isError} visible={toast.visible} />
-
     </>
   );
 }

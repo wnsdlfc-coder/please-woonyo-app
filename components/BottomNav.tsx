@@ -5,10 +5,10 @@ type PageId = 'home' | 'apply' | 'calendar' | 'map' | 'my';
 interface BottomNavProps {
   activePage: PageId;
   onNavigate: (page: PageId) => void;
-  unreadNoteCount: number;
+  unreadMsgCount: number;
 }
 
-export default function BottomNav({ activePage, onNavigate, unreadNoteCount }: BottomNavProps) {
+export default function BottomNav({ activePage, onNavigate, unreadMsgCount }: BottomNavProps) {
   return (
     <div className="bottom-nav">
       <button className={'nav-item' + (activePage === 'home' ? ' active' : '')} onClick={() => onNavigate('home')}>
@@ -46,8 +46,8 @@ export default function BottomNav({ activePage, onNavigate, unreadNoteCount }: B
           <circle cx="12" cy="7" r="4" />
         </svg>
         <span className="nav-label">마이</span>
-        {unreadNoteCount > 0 && (
-          <span className="nav-badge">{unreadNoteCount}</span>
+        {unreadMsgCount > 0 && (
+          <span className="nav-badge">{unreadMsgCount}</span>
         )}
       </button>
     </div>

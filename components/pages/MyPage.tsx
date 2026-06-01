@@ -1,12 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { auth, db } from '@/lib/firebase';
 import {
   collection, doc, setDoc, updateDoc, deleteDoc, addDoc,
   getDocs, query, where, serverTimestamp, getDoc
 } from 'firebase/firestore';
 import { arrayUnion } from 'firebase/firestore';
-
 import { updateProfile } from 'firebase/auth';
 import { formatTime } from '@/lib/utils';
 
@@ -19,13 +18,14 @@ interface Request {
 }
 interface Diary {
   id: string; reqId?: string; date: string; title: string; content: string;
-  star?: number; author?: string; region?: string;
-  tags?: string[];
+  star?: number; author?: string; region?: string; tags?: string[];
   comments?: { author: string; text: string; createdAt: string }[];
 }
-interface Note {
-  id: string; fromUser: string; toUser: string; text: string; read: boolean;
-  createdAt?: { toDate?: () => Date; seconds?: number };
+interface Message {
+  id: string; fromUser: string; text: string;
+  createdAt: { seconds?: number } | null;
+  readAt: { seconds?: number } | null;
+  selfDestruct: boolean;
 }
 interface Member { nick: string; email: string; uid: string; }
 
@@ -35,7 +35,7 @@ interface MyPageProps {
   currentCoupleCode: string;
   allRequests: Request[];
   allDiaries: Diary[];
-  allNotes: Note[];
+  allMessages: Message[];
   allPlaces: { id: string; category: string }[];
   activeMyTab: string;
   onChangeNick: (newNick: string) => void;
@@ -43,18 +43,22 @@ interface MyPageProps {
   showToast: (msg: string, isErr?: boolean) => void;
   showConfirm: (msg: string, onOk: () => void) => void;
   onOpenDiary: (reqId: string, date?: string) => void;
-  onOpenNoteModal: () => void;
-  onMarkNotesRead: () => void;
+  onSendMessage: (text: string, selfDestruct: boolean) => void;
 }
 
-type MyTab = 'received' | 'sent' | 'dates' | 'diaries' | 'notes';
+type MyTab = 'chat' | 'received' | 'sent' | 'dates' | 'diaries' | 'stats';
 type FilterType = '전체' | '대기' | '수락' | '반려';
+
+const THEME_EMOJI: Record<string, string> = {
+  '맛집탐방': '🍽️', '카페': '☕', '드라이브': '🚗', '액티비티': '🎯',
+  '힐링': '🌿', '문화생활': '🎬', '집데이트': '🏠', '로맨틱': '💕',
+};
 
 export default function MyPage({
   currentUser, currentNick, currentCoupleCode,
-  allRequests, allDiaries, allNotes, allPlaces,
+  allRequests, allDiaries, allMessages, allPlaces,
   activeMyTab, onChangeNick, onSwitchRoom,
-  showToast, showConfirm, onOpenDiary, onOpenNoteModal, onMarkNotesRead
+  showToast, showConfirm, onOpenDiary, onSendMessage,
 }: MyPageProps) {
   const [myTab, setMyTab] = useState<MyTab>((activeMyTab as MyTab) || 'received');
   const [myFilter, setMyFilter] = useState<FilterType>('전체');
@@ -67,7 +71,14 @@ export default function MyPage({
   const [nickErr, setNickErr] = useState('');
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
-  // Join other room modal
+  // 채팅
+  const [chatInput, setChatInput] = useState('');
+  const [selfDestructMode, setSelfDestructMode] = useState(false);
+  const [countdowns, setCountdowns] = useState<Record<string, number>>({});
+  const timerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // 다른 방 입장
   const [showJoinOtherModal, setShowJoinOtherModal] = useState(false);
   const [joinOtherCode, setJoinOtherCode] = useState('');
   const [joinOtherStep, setJoinOtherStep] = useState<'input' | 'nick'>('input');
@@ -76,25 +87,59 @@ export default function MyPage({
   const [joinOtherNewNick, setJoinOtherNewNick] = useState('');
   const [joinOtherErr, setJoinOtherErr] = useState(false);
 
-  // Create new room modal
+  // 새 방 만들기
   const [showCreateNewModal, setShowCreateNewModal] = useState(false);
   const [newRoomCode, setNewRoomCode] = useState('');
   const [newRoomNick, setNewRoomNick] = useState(currentNick);
 
+  useEffect(() => { setMyTab((activeMyTab as MyTab) || 'received'); }, [activeMyTab]);
+  useEffect(() => { loadRoomInfo(); }, [currentCoupleCode, currentNick]); // eslint-disable-line
+
+  // 채팅: 탭 열릴 때 읽음 처리
   useEffect(() => {
-    setMyTab((activeMyTab as MyTab) || 'received');
-  }, [activeMyTab]);
+    if (myTab !== 'chat') return;
+    const unread = allMessages.filter(m => m.fromUser !== currentNick && !m.readAt);
+    unread.forEach(m => {
+      updateDoc(doc(db, 'messages', m.id), { readAt: serverTimestamp() }).catch(() => {});
+    });
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  }, [myTab, allMessages, currentNick]);
+
+  // 채팅: 자동삭제 타이머
+  useEffect(() => {
+    if (myTab !== 'chat') return;
+    const toDestruct = allMessages.filter(
+      m => m.selfDestruct && m.fromUser !== currentNick && m.readAt && !timerRefs.current[m.id]
+    );
+    toDestruct.forEach(m => {
+      const readSec = (m.readAt as { seconds?: number })?.seconds;
+      const readTime = readSec ? readSec * 1000 : Date.now();
+      const remaining = Math.max(0, 10000 - (Date.now() - readTime));
+      if (remaining <= 0) {
+        deleteDoc(doc(db, 'messages', m.id)).catch(() => {});
+        return;
+      }
+      setCountdowns(prev => ({ ...prev, [m.id]: Math.ceil(remaining / 1000) }));
+      timerRefs.current[m.id] = setInterval(() => {
+        setCountdowns(prev => {
+          const next = (prev[m.id] || 1) - 1;
+          if (next <= 0) {
+            clearInterval(timerRefs.current[m.id]);
+            delete timerRefs.current[m.id];
+            deleteDoc(doc(db, 'messages', m.id)).catch(() => {});
+            const updated = { ...prev };
+            delete updated[m.id];
+            return updated;
+          }
+          return { ...prev, [m.id]: next };
+        });
+      }, 1000);
+    });
+  }, [allMessages, currentNick, myTab]);
 
   useEffect(() => {
-    loadRoomInfo();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentCoupleCode, currentNick]);
-
-  useEffect(() => {
-    if (myTab === 'notes') {
-      onMarkNotesRead();
-    }
-  }, [myTab, onMarkNotesRead]);
+    return () => { Object.values(timerRefs.current).forEach(clearInterval); };
+  }, []);
 
   const loadRoomInfo = async () => {
     const roomDoc = await getDoc(doc(db, 'rooms', currentCoupleCode));
@@ -117,9 +162,7 @@ export default function MyPage({
   const handleKick = async (nick: string) => {
     showConfirm(`${nick}님을 방에서 내보낼까요?`, async () => {
       try {
-        await updateDoc(doc(db, 'rooms', currentCoupleCode), {
-          kickedMembers: arrayUnion(nick),
-        });
+        await updateDoc(doc(db, 'rooms', currentCoupleCode), { kickedMembers: arrayUnion(nick) });
         showToast(`${nick}님을 내보냈어요`);
         loadRoomInfo();
       } catch (e: unknown) {
@@ -144,10 +187,7 @@ export default function MyPage({
     try {
       if (auth.currentUser) await updateProfile(auth.currentUser, { displayName: newNick.trim() });
       await setDoc(doc(db, 'users', currentUser.uid), { nickname: newNick.trim(), updatedAt: serverTimestamp() }, { merge: true });
-      await setDoc(doc(db, 'users', newNick.trim()), {
-        uid: currentUser.uid, nickname: newNick.trim(),
-        coupleCode: currentCoupleCode, email: currentUser.email || '', kicked: false
-      }, { merge: true });
+      await setDoc(doc(db, 'users', newNick.trim()), { uid: currentUser.uid, nickname: newNick.trim(), coupleCode: currentCoupleCode, email: currentUser.email || '', kicked: false }, { merge: true });
       if (currentNick && currentNick !== newNick.trim()) {
         setDoc(doc(db, 'users', currentNick), { coupleCode: '', nickname: newNick.trim() }, { merge: true }).catch(() => {});
       }
@@ -161,7 +201,6 @@ export default function MyPage({
       setNickErr('변경 실패: ' + (err.message || ''));
     }
   };
-
 
   const handleJoinOtherVerify = async () => {
     if (joinOtherCode.length !== 6) { showToast('6자리 코드를 입력해주세요', true); return; }
@@ -181,16 +220,14 @@ export default function MyPage({
     if (nick === '__new__') nick = joinOtherNewNick.trim();
     if (!nick) { showToast('닉네임을 선택하거나 입력해주세요', true); return; }
     if (!joinOtherMembers.includes(nick) && joinOtherMembers.length >= 2) {
-      showToast('이 방은 이미 2명이에요 💑', true);
-      return;
+      showToast('이 방은 이미 2명이에요 💑', true); return;
     }
     setShowJoinOtherModal(false);
     onSwitchRoom(joinOtherCode, nick);
   };
 
   const handleCreateNewRoom = () => {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    setNewRoomCode(code);
+    setNewRoomCode(String(Math.floor(100000 + Math.random() * 900000)));
     setNewRoomNick(currentNick);
     setShowCreateNewModal(true);
   };
@@ -201,37 +238,32 @@ export default function MyPage({
     onSwitchRoom(newRoomCode, newRoomNick.trim());
   };
 
-  const handleCheckItem = async (req: Request, idx: number) => {
-    const cl = (req.checklist || []).map((c, i) => i === idx ? { ...c, done: !c.done } : c);
-    await updateDoc(doc(db, 'requests', req.id), { checklist: cl });
-  };
-
   const handleAccept = async (id: string) => {
     await updateDoc(doc(db, 'requests', id), { status: '수락' });
     showToast('수락했어요! 💕');
   };
-
   const handleReject = (id: string) => {
     showConfirm('거절할까요?', async () => {
       await deleteDoc(doc(db, 'requests', id));
       showToast('거절했어요');
     });
   };
-
   const handleReturn = (id: string) => {
     showConfirm('수락한 신청을 반려할까요?', async () => {
       await updateDoc(doc(db, 'requests', id), { status: '반려' });
       showToast('반려했어요');
     });
   };
-
   const handleCancel = (id: string) => {
     showConfirm('신청을 취소할까요?', async () => {
       await deleteDoc(doc(db, 'requests', id));
       showToast('신청이 취소됐어요');
     });
   };
-
+  const handleCheckItem = async (req: Request, idx: number) => {
+    const cl = (req.checklist || []).map((c, i) => i === idx ? { ...c, done: !c.done } : c);
+    await updateDoc(doc(db, 'requests', req.id), { checklist: cl });
+  };
   const handleSendComment = async (diaryId: string) => {
     const text = (commentInputs[diaryId] || '').trim();
     if (!text) return;
@@ -242,10 +274,15 @@ export default function MyPage({
     showToast('댓글을 달았어요!');
   };
 
+  const handleSendChat = useCallback(() => {
+    if (!chatInput.trim()) return;
+    onSendMessage(chatInput.trim(), selfDestructMode);
+    setChatInput('');
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  }, [chatInput, selfDestructMode, onSendMessage]);
+
   function statusBadge(status: string) {
-    const map: Record<string, string> = {
-      '대기': 's-pending', '수락': 's-accepted', '거절': 's-rejected', '취소': 's-canceled', '반려': 's-returned'
-    };
+    const map: Record<string, string> = { '대기': 's-pending', '수락': 's-accepted', '거절': 's-rejected', '취소': 's-canceled', '반려': 's-returned' };
     return <span className={'sbadge ' + (map[status] || 's-pending')}>{status}</span>;
   }
 
@@ -273,54 +310,114 @@ export default function MyPage({
     </div>
   );
 
-  const renderDiaryCard = (d: Diary) => {
-    const relReq = allRequests.find(r => r.id === d.reqId || (r.date === d.date && (r.status === '수락' || r.status === 'accepted')));
-    return (
-      <div key={d.id} className="diary-card">
-        <div className="diary-date-lbl">
-          {d.date} · {d.author || ''}
-          {relReq?.region && (
-            <span style={{ display: 'inline-block', background: 'var(--rose4)', color: 'var(--rose)', borderRadius: '12px', padding: '2px 9px', fontSize: '11px', fontWeight: 700, marginLeft: '6px' }}>📍{relReq.region}</span>
-          )}
-        </div>
-        <div className="diary-title">{d.title}</div>
-        <div className="diary-body">{d.content}</div>
-        <div className="diary-stars">{'★'.repeat(d.star || 5)}{'☆'.repeat(5 - (d.star || 5))}</div>
-        {d.tags && d.tags.length > 0 && (
-          <div className="diary-tags">{d.tags.map(t => <span key={t} className="diary-tag">#{t.trim()}</span>)}</div>
-        )}
-        <div className="comment-area">
-          {(d.comments || []).map((c, i) => (
-            <div key={i} className="comment-item">
-              <span className="comment-author">{c.author}</span>
-              <span className="comment-text">{c.text}</span>
-            </div>
-          ))}
-          <div className="comment-row">
-            <input
-              type="text"
-              className="form-input comment-input"
-              placeholder="댓글 달기..."
-              style={{ fontSize: '13px', padding: '8px 12px' }}
-              value={commentInputs[d.id] || ''}
-              onChange={e => setCommentInputs(prev => ({ ...prev, [d.id]: e.target.value }))}
-              onKeyDown={e => { if (e.key === 'Enter') handleSendComment(d.id); }}
-            />
-            <button className="btn btn-rose btn-sm" onClick={() => handleSendComment(d.id)}>↑</button>
+  const renderDiaryCard = (d: Diary) => (
+    <div key={d.id} className="diary-card">
+      <div className="diary-date-lbl">
+        {d.date} · {d.author || ''}
+        {d.region && <span style={{ display: 'inline-block', background: 'var(--rose4)', color: 'var(--rose)', borderRadius: '12px', padding: '2px 9px', fontSize: '11px', fontWeight: 700, marginLeft: '6px' }}>📍{d.region}</span>}
+      </div>
+      <div className="diary-title">{d.title}</div>
+      <div className="diary-body">{d.content}</div>
+      <div className="diary-stars">{'★'.repeat(d.star || 5)}{'☆'.repeat(5 - (d.star || 5))}</div>
+      {d.tags && d.tags.length > 0 && (
+        <div className="diary-tags">{d.tags.map(t => <span key={t} className="diary-tag">#{t.trim()}</span>)}</div>
+      )}
+      <div className="comment-area">
+        {(d.comments || []).map((c, i) => (
+          <div key={i} className="comment-item">
+            <span className="comment-author">{c.author}</span>
+            <span className="comment-text">{c.text}</span>
           </div>
+        ))}
+        <div className="comment-row">
+          <input type="text" className="form-input comment-input" placeholder="댓글 달기..." style={{ fontSize: '13px', padding: '8px 12px' }}
+            value={commentInputs[d.id] || ''}
+            onChange={e => setCommentInputs(prev => ({ ...prev, [d.id]: e.target.value }))}
+            onKeyDown={e => { if (e.key === 'Enter') handleSendComment(d.id); }} />
+          <button className="btn btn-rose btn-sm" onClick={() => handleSendComment(d.id)}>↑</button>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
 
   const accepted = allRequests.filter(r => r.status === '수락' || r.status === '확정');
   const filterReqs = (list: Request[]) => myFilter === '전체' ? list : list.filter(r => r.status === myFilter);
 
   const renderContent = () => {
+    // ── 채팅 ──
+    if (myTab === 'chat') {
+      return (
+        <div>
+          <div className="chat-messages" style={{ maxHeight: '52vh', overflowY: 'auto', marginBottom: '12px' }}>
+            {allMessages.length === 0 && (
+              <div className="empty-state">아직 대화가 없어요 💬<br />먼저 말을 걸어봐요</div>
+            )}
+            {allMessages.map(m => {
+              const isMine = m.fromUser === currentNick;
+              const countdown = countdowns[m.id];
+              return (
+                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', marginBottom: '10px' }}>
+                  <div className={`chat-bubble ${isMine ? 'mine' : 'theirs'}`}>
+                    {m.selfDestruct && (
+                      <div className="chat-destruct-label">
+                        💣 {countdown ? `${countdown}초 후 삭제` : m.readAt ? '곧 삭제...' : '읽으면 10초 후 삭제'}
+                      </div>
+                    )}
+                    {m.text}
+                  </div>
+                  <div className={`chat-time ${isMine ? 'mine' : 'theirs'}`}>
+                    {formatTime(m.createdAt as Parameters<typeof formatTime>[0])}
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={chatEndRef} />
+          </div>
+
+          <button
+            onClick={() => setSelfDestructMode(v => !v)}
+            style={{
+              padding: '5px 14px', borderRadius: '20px', marginBottom: '8px',
+              border: '1.5px solid ' + (selfDestructMode ? 'var(--rose)' : 'var(--border)'),
+              background: selfDestructMode ? 'var(--rose4)' : 'transparent',
+              color: selfDestructMode ? 'var(--rose)' : 'var(--text3)',
+              fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {selfDestructMode ? '💣 자동삭제 ON — 읽고 10초 후 삭제' : '💣 자동삭제'}
+          </button>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="메시지를 입력해요..."
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSendChat(); }}
+              style={{ flex: 1, borderRadius: '24px', padding: '10px 16px' }}
+            />
+            <button
+              onClick={handleSendChat}
+              style={{
+                width: '44px', height: '44px', borderRadius: '50%',
+                background: 'var(--rose)', border: 'none', color: 'white',
+                fontSize: '18px', cursor: 'pointer', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >↑</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── 받은 신청 ──
     if (myTab === 'received') {
       const list = filterReqs(allRequests.filter(r => r.toUser === currentNick));
       return list.length ? list.map(r => renderReqCard(r, r.status === '대기')) : <div className="empty-state">받은 신청이 없어요</div>;
     }
+
+    // ── 보낸 신청 ──
     if (myTab === 'sent') {
       const list = filterReqs(allRequests.filter(r => r.fromUser === currentNick));
       return list.length ? list.map(r => (
@@ -332,6 +429,8 @@ export default function MyPage({
         </div>
       )) : <div className="empty-state">보낸 신청이 없어요</div>;
     }
+
+    // ── 데이트 기록 ──
     if (myTab === 'dates') {
       const list = allRequests.filter(r => r.status === '수락').sort((a, b) => b.date.localeCompare(a.date));
       return list.length ? list.map(r => {
@@ -339,13 +438,7 @@ export default function MyPage({
         return (
           <div key={r.id} className="date-card">
             <div className="date-card-date">{r.date} {r.time}</div>
-            <div className="date-card-info">{r.theme} · {r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
-            {(r.checklist || []).map((c, i) => (
-              <div key={i} className="mini-item" onClick={() => handleCheckItem(r, i)}>
-                <div className={'mini-chk' + (c.done ? ' done' : '')}>{c.done ? '✓' : ''}</div>
-                <span className={'mini-txt' + (c.done ? ' done' : '')}>{c.important && <span style={{ color: '#F4A300' }}>★ </span>}{c.text}</span>
-              </div>
-            ))}
+            <div className="date-card-info">{THEME_EMOJI[r.theme] || ''} {r.theme} · {r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
             {diary
               ? <div style={{ background: 'var(--rose4)', borderRadius: '10px', padding: '10px 12px', fontSize: '13px', color: 'var(--text2)', marginTop: '8px' }}>📔 {diary.title}</div>
               : <button className="btn btn-outline btn-sm btn-full" style={{ marginTop: '8px' }} onClick={() => onOpenDiary(r.id, r.date)}>일기 쓰기 📔</button>
@@ -354,25 +447,80 @@ export default function MyPage({
         );
       }) : <div className="empty-state">데이트 기록이 없어요</div>;
     }
+
+    // ── 일기 ──
     if (myTab === 'diaries') {
-      return allDiaries.length
-        ? allDiaries.map(d => renderDiaryCard(d))
-        : <div className="empty-state">아직 일기가 없어요 📔</div>;
+      return allDiaries.length ? allDiaries.map(d => renderDiaryCard(d)) : <div className="empty-state">아직 일기가 없어요 📔</div>;
     }
-    if (myTab === 'notes') {
+
+    // ── 통계 ──
+    if (myTab === 'stats') {
+      const totalDates = allRequests.filter(r => r.status === '수락').length;
+      const themeCounts = allRequests.filter(r => r.status === '수락').reduce((acc, r) => {
+        if (r.theme) acc[r.theme] = (acc[r.theme] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      const topThemes = Object.entries(themeCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+      const regionCounts = allRequests.filter(r => r.status === '수락' && r.region).reduce((acc, r) => {
+        const region = r.region.split(' · ')[0];
+        acc[region] = (acc[region] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      const topRegions = Object.entries(regionCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+      const avgStar = allDiaries.length > 0
+        ? (allDiaries.reduce((sum, d) => sum + (d.star || 5), 0) / allDiaries.length).toFixed(1)
+        : null;
+
+      const medals = ['🥇', '🥈', '🥉'];
+
       return (
-        <>
-          <div style={{ textAlign: 'right', marginBottom: '12px' }}>
-            <button className="btn btn-rose btn-sm" onClick={onOpenNoteModal}>쪽지 보내기 💌</button>
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+            {[
+              { val: totalDates, label: '함께한 데이트' },
+              { val: allDiaries.length, label: '기록한 일기' },
+              { val: avgStar ? `★${avgStar}` : '-', label: '평균 별점' },
+              { val: allPlaces.filter(p => p.category === 'visited').length, label: '방문한 장소' },
+            ].map(({ val, label }) => (
+              <div key={label} className="card" style={{ textAlign: 'center', padding: '20px 12px' }}>
+                <div style={{ fontSize: '32px', fontWeight: 900, color: 'var(--rose)', lineHeight: 1 }}>{val}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '6px' }}>{label}</div>
+              </div>
+            ))}
           </div>
-          {allNotes.length ? allNotes.map(n => (
-            <div key={n.id} className={'note-item' + (n.toUser === currentNick && !n.read ? ' unread' : '')}>
-              <div className="note-from">{n.fromUser === currentNick ? '내가 보냄 → ' + n.toUser : n.fromUser + ' → 나'}</div>
-              <div className="note-text">{n.text}</div>
-              <div className="note-time">{formatTime(n.createdAt)}</div>
+
+          {topThemes.length > 0 && (
+            <div className="card" style={{ marginBottom: '10px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '14px' }}>🎯 즐겨하는 데이트</div>
+              {topThemes.map(([theme, count], i) => (
+                <div key={theme} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: i < topThemes.length - 1 ? '10px' : 0 }}>
+                  <span style={{ fontSize: '18px' }}>{medals[i]}</span>
+                  <span style={{ flex: 1, fontSize: '14px', fontWeight: 600 }}>{THEME_EMOJI[theme] || ''} {theme}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text3)' }}>{count}회</span>
+                </div>
+              ))}
             </div>
-          )) : <div className="empty-state">쪽지가 없어요 💌<br />상대방에게 쪽지를 보내봐요</div>}
-        </>
+          )}
+
+          {topRegions.length > 0 && (
+            <div className="card">
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '14px' }}>📍 자주 간 지역</div>
+              {topRegions.map(([region, count], i) => (
+                <div key={region} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: i < topRegions.length - 1 ? '10px' : 0 }}>
+                  <span style={{ fontSize: '18px' }}>{medals[i]}</span>
+                  <span style={{ flex: 1, fontSize: '14px', fontWeight: 600 }}>{region}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text3)' }}>{count}회</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {totalDates === 0 && (
+            <div className="empty-state">데이트를 기록하면<br />통계가 나타나요 💕</div>
+          )}
+        </div>
       );
     }
   };
@@ -381,7 +529,7 @@ export default function MyPage({
     <div id="page-my" className="page active">
       <div className="page-title">마이페이지</div>
 
-      {/* 로그인 정보 카드 */}
+      {/* 로그인 정보 */}
       <div className="card" style={{ marginBottom: '12px', padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {currentUser.photoURL ? (
@@ -391,29 +539,21 @@ export default function MyPage({
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '2px' }}>로그인 계정</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)', wordBreak: 'break-all', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email || '(이메일 없음)'}</div>
+            <div style={{ fontSize: '13px', fontWeight: 700, wordBreak: 'break-all', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email || '(이메일 없음)'}</div>
           </div>
         </div>
-        {/* 닉네임 변경 */}
         <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '6px' }}>닉네임</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, flex: 1, color: 'var(--text)' }}>{currentNick}</div>
+            <div style={{ fontSize: '14px', fontWeight: 700, flex: 1 }}>{currentNick}</div>
             <button className="btn btn-outline btn-xs" onClick={() => { setChangeNickOpen(v => !v); setNickErr(''); setNewNick(currentNick); }}>변경</button>
           </div>
           {changeNickOpen && (
             <div style={{ marginTop: '8px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="새 닉네임"
-                  maxLength={10}
-                  value={newNick}
-                  onChange={e => setNewNick(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSaveNick(); }}
-                  style={{ flex: 1, fontSize: '14px', padding: '8px 12px' }}
-                />
+                <input type="text" className="form-input" placeholder="새 닉네임" maxLength={10} value={newNick}
+                  onChange={e => setNewNick(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveNick(); }}
+                  style={{ flex: 1, fontSize: '14px', padding: '8px 12px' }} />
                 <button className="btn btn-rose btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleSaveNick}>저장</button>
               </div>
               {nickErr && <div className="err-msg" style={{ marginTop: '4px' }}>{nickErr}</div>}
@@ -422,20 +562,19 @@ export default function MyPage({
         </div>
       </div>
 
-      {/* 방 정보 카드 */}
+      {/* 방 정보 */}
       <div className="card" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '4px' }}>ROOM</div>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text)' }}>{roomTitle}</div>
+            <div style={{ fontSize: '18px', fontWeight: 800 }}>{roomTitle}</div>
           </div>
-          <button className="btn btn-outline btn-sm" onClick={() => setEditRoomTitle(v => !v)}>
-            {editRoomTitle ? '취소' : '편집'}
-          </button>
+          <button className="btn btn-outline btn-sm" onClick={() => setEditRoomTitle(v => !v)}>{editRoomTitle ? '취소' : '편집'}</button>
         </div>
         {editRoomTitle && (
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-            <input type="text" className="form-input" maxLength={20} placeholder="방 이름 (최대 20자)" value={roomTitleInput} onChange={e => setRoomTitleInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveRoomTitle(); }} style={{ flex: 1 }} />
+            <input type="text" className="form-input" maxLength={20} placeholder="방 이름 (최대 20자)" value={roomTitleInput}
+              onChange={e => setRoomTitleInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveRoomTitle(); }} style={{ flex: 1 }} />
             <button className="btn btn-rose btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleSaveRoomTitle}>저장</button>
           </div>
         )}
@@ -453,9 +592,7 @@ export default function MyPage({
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', minHeight: '28px' }}>
             {members.map(m => (
               <div key={m.nick} style={{ background: 'var(--rose4)', borderRadius: '12px', padding: '8px 12px', flex: 1, minWidth: '120px' }}>
-                <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--rose)' }}>
-                  {m.nick}
-                </div>
+                <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--rose)' }}>{m.nick}</div>
                 {m.email && <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '2px', wordBreak: 'break-all' }}>{m.email}</div>}
                 {m.nick !== currentNick && (
                   <button className="btn btn-outline btn-xs" style={{ marginTop: '6px', fontSize: '11px', color: '#e74c3c', borderColor: '#e74c3c' }} onClick={() => handleKick(m.nick)}>내보내기</button>
@@ -486,10 +623,17 @@ export default function MyPage({
       </div>
 
       {/* 탭 */}
-      <div className="tab-nav">
-        {(['received', 'sent', 'dates', 'diaries', 'notes'] as MyTab[]).map(tab => (
+      <div className="tab-nav" style={{ overflowX: 'auto' }}>
+        {([
+          ['chat', '💬 채팅'],
+          ['received', '받은 신청'],
+          ['sent', '보낸 신청'],
+          ['dates', '데이트 기록'],
+          ['diaries', '일기'],
+          ['stats', '통계'],
+        ] as [MyTab, string][]).map(([tab, label]) => (
           <button key={tab} className={'tab-btn' + (myTab === tab ? ' active' : '')} onClick={() => setMyTab(tab)}>
-            {tab === 'received' ? '받은 신청' : tab === 'sent' ? '보낸 신청' : tab === 'dates' ? '데이트 기록' : tab === 'diaries' ? '일기' : '쪽지 💌'}
+            {label}
           </button>
         ))}
       </div>
@@ -515,7 +659,9 @@ export default function MyPage({
           <div className="form-group">
             <label className="form-label">새 커플 코드 (6자리)</label>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <input type="text" className="form-input" maxLength={6} placeholder="000000" style={{ flex: 1, letterSpacing: '4px', fontSize: '20px', fontWeight: 800, textAlign: 'center' }} value={joinOtherCode} onChange={e => { setJoinOtherCode(e.target.value); setJoinOtherErr(false); }} disabled={joinOtherStep === 'nick'} onKeyDown={e => { if (e.key === 'Enter') handleJoinOtherVerify(); }} />
+              <input type="text" className="form-input" maxLength={6} placeholder="000000" style={{ flex: 1, letterSpacing: '4px', fontSize: '20px', fontWeight: 800, textAlign: 'center' }}
+                value={joinOtherCode} onChange={e => { setJoinOtherCode(e.target.value); setJoinOtherErr(false); }}
+                disabled={joinOtherStep === 'nick'} onKeyDown={e => { if (e.key === 'Enter') handleJoinOtherVerify(); }} />
               <button className="btn btn-outline btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleJoinOtherVerify}>확인</button>
             </div>
             {joinOtherErr && <div className="err-msg">존재하지 않는 코드예요</div>}

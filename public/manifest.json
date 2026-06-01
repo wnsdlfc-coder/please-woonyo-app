@@ -1,0 +1,18 @@
+{
+  "name": "Please Woonyo",
+  "short_name": "Please",
+  "description": "우리만의 데이트 기록",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAFAFA",
+  "theme_color": "#FF6B9D",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
