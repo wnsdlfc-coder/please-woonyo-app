@@ -409,47 +409,55 @@ export default function MyPage({
     <div id="page-my" className="page active">
       <div className="page-title">마이페이지</div>
 
-      {/* 로그인 정보 */}
+      {/* 로그인 정보 — 가로 레이아웃 */}
       <div className="card" style={{ marginBottom: '12px', padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {currentUser.photoURL ? (
-            <img src={currentUser.photoURL} alt="profile" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--rose2)' }} />
+            <img src={currentUser.photoURL} alt="profile" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--rose2)', flexShrink: 0 }} />
           ) : (
             <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--rose4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>👤</div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '2px' }}>로그인 계정</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, wordBreak: 'break-all', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email || '(이메일 없음)'}</div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text)', marginBottom: '2px' }}>{currentNick}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{currentUser.email || '(이메일 없음)'}</div>
           </div>
+          <button className="btn btn-outline btn-xs" style={{ flexShrink: 0 }} onClick={() => { setChangeNickOpen(v => !v); setNickErr(''); setNewNick(currentNick); }}>닉변경</button>
         </div>
-        <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '6px' }}>닉네임</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, flex: 1 }}>{currentNick}</div>
-            <button className="btn btn-outline btn-xs" onClick={() => { setChangeNickOpen(v => !v); setNickErr(''); setNewNick(currentNick); }}>변경</button>
-          </div>
-          {changeNickOpen && (
-            <div style={{ marginTop: '8px' }}>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input type="text" className="form-input" placeholder="새 닉네임" maxLength={10} value={newNick}
-                  onChange={e => setNewNick(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveNick(); }}
-                  style={{ flex: 1, fontSize: '14px', padding: '8px 12px' }} />
-                <button className="btn btn-rose btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleSaveNick}>저장</button>
-              </div>
-              {nickErr && <div className="err-msg" style={{ marginTop: '4px' }}>{nickErr}</div>}
+        {changeNickOpen && (
+          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input type="text" className="form-input" placeholder="새 닉네임" maxLength={10} value={newNick}
+                onChange={e => setNewNick(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveNick(); }}
+                style={{ flex: 1, fontSize: '14px', padding: '8px 12px' }} />
+              <button className="btn btn-rose btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleSaveNick}>저장</button>
             </div>
-          )}
-        </div>
+            {nickErr && <div className="err-msg" style={{ marginTop: '4px' }}>{nickErr}</div>}
+          </div>
+        )}
       </div>
 
       {/* 방 정보 */}
       <div className="card" style={{ marginBottom: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '4px' }}>ROOM</div>
-            <div style={{ fontSize: '18px', fontWeight: 800 }}>{roomTitle}</div>
+        {/* 방 이름 + 커플 코드 한 줄 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: editRoomTitle ? '10px' : '12px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '2px' }}>ROOM</div>
+            <div style={{ fontSize: '16px', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{roomTitle}</div>
           </div>
-          <button className="btn btn-outline btn-sm" onClick={() => setEditRoomTitle(v => !v)}>{editRoomTitle ? '취소' : '편집'}</button>
+          <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexShrink: 0 }}>
+            {codeVisible && (
+              <span style={{ fontSize: '13px', fontWeight: 800, letterSpacing: '3px', color: 'var(--rose)', fontVariantNumeric: 'tabular-nums' }}>{currentCoupleCode}</span>
+            )}
+            <button className="btn btn-outline btn-xs" onClick={() => setCodeVisible(v => !v)} style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
+              {codeVisible ? '숨기기' : '코드'}
+            </button>
+            {codeVisible && (
+              <button className="btn btn-outline btn-xs" style={{ fontSize: '11px' }} onClick={() => {
+                navigator.clipboard.writeText(currentCoupleCode).then(() => showToast('복사됐어요! 📋')).catch(() => showToast(currentCoupleCode));
+              }}>복사</button>
+            )}
+            <button className="btn btn-outline btn-xs" style={{ fontSize: '11px' }} onClick={() => setEditRoomTitle(v => !v)}>{editRoomTitle ? '취소' : '편집'}</button>
+          </div>
         </div>
         {editRoomTitle && (
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
@@ -458,36 +466,18 @@ export default function MyPage({
             <button className="btn btn-rose btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={handleSaveRoomTitle}>저장</button>
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '4px' }}>COUPLE CODE</div>
-            {codeVisible ? (
-              <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '6px', color: 'var(--rose)', fontVariantNumeric: 'tabular-nums' }}>{currentCoupleCode}</div>
-            ) : (
-              <div style={{ fontSize: '14px', color: 'var(--text3)' }}>••••••</div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button className="btn btn-outline btn-sm" onClick={() => setCodeVisible(v => !v)}>
-              {codeVisible ? '숨기기' : '코드 보기'}
-            </button>
-            {codeVisible && (
-              <button className="btn btn-outline btn-sm" onClick={() => {
-                navigator.clipboard.writeText(currentCoupleCode).then(() => showToast('코드를 복사했어요! 📋')).catch(() => showToast(currentCoupleCode));
-              }}>복사</button>
-            )}
-          </div>
-        </div>
         <div style={{ marginBottom: '14px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '8px' }}>MEMBERS</div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', minHeight: '28px' }}>
             {members.map(m => (
-              <div key={m.nick} style={{ background: 'var(--rose4)', borderRadius: '12px', padding: '8px 12px', flex: 1, minWidth: '120px' }}>
-                <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--rose)' }}>{m.nick}</div>
-                {m.email && <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '2px', wordBreak: 'break-all' }}>{m.email}</div>}
-                {m.nick !== currentNick && (
-                  <button className="btn btn-outline btn-xs" style={{ marginTop: '6px', fontSize: '11px', color: '#e74c3c', borderColor: '#e74c3c' }} onClick={() => handleKick(m.nick)}>내보내기</button>
-                )}
+              <div key={m.nick} style={{ background: 'var(--rose4)', borderRadius: '10px', padding: '8px 12px', flex: 1, minWidth: '120px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                  <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--rose)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nick}</div>
+                  {m.nick !== currentNick && (
+                    <button className="btn btn-outline btn-xs" style={{ fontSize: '10px', color: '#e74c3c', borderColor: '#e74c3c', flexShrink: 0, padding: '3px 7px' }} onClick={() => handleKick(m.nick)}>내보내기</button>
+                  )}
+                </div>
+                {m.email && <div style={{ fontSize: '10px', color: 'var(--text3)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>}
               </div>
             ))}
             {members.length === 0 && <div style={{ color: 'var(--text3)', fontSize: '13px' }}>아직 멤버가 없어요</div>}
@@ -531,7 +521,7 @@ export default function MyPage({
               <span style={{ opacity: 0.4, fontSize: '12px' }}>{tabMenuOpen ? '▲' : '▼'}</span>
             </button>
             {tabMenuOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: '10px', zIndex: 50, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: '10px', zIndex: 200, overflowY: 'auto', maxHeight: '55vh', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
                 {TAB_LIST.map(([tab, label]) => (
                   <button key={tab} onClick={() => { setMyTab(tab); setTabMenuOpen(false); }}
                     style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--border)', background: myTab === tab ? 'var(--rose4)' : 'white', color: myTab === tab ? 'var(--rose)' : 'var(--text)', fontWeight: myTab === tab ? 800 : 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px' }}>

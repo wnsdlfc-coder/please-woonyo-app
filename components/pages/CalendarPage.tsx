@@ -201,12 +201,28 @@ export default function CalendarPage({
       cells.push(
         <button key={dateStr} className={cls} style={bgStyle} onClick={() => { setDetailDate(dateStr); setShowDetailModal(true); }}>
           <span className="cal-num">{d}</span>
-          <div className="cal-dots">
-            {hasAccepted && <div className="cal-dot cal-dot-date" />}
-            {hasPending && <div className="cal-dot cal-dot-pending" />}
-            {hasAnni && <div className="cal-dot cal-dot-anniversary" />}
-            {hasSched && <div className="cal-dot" style={{ background: 'var(--yellow)' }} />}
-            {hasNoDiary && <div className="cal-dot cal-dot-no-diary" />}
+          <div style={{ display: 'flex', gap: '1px', marginTop: '2px', flexWrap: 'wrap', justifyContent: 'center', minHeight: '10px' }}>
+            {hasAnni && (
+              <span style={{ fontSize: '7px', fontWeight: 800, color: '#B71C1C', background: 'rgba(255,100,130,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>
+                {(anniDatesMap[dateStr]?.[0]?.name || '기').charAt(0)}
+              </span>
+            )}
+            {hasAccepted && (
+              <span style={{ fontSize: '7px', fontWeight: 800, color: '#1B5E20', background: 'rgba(100,210,100,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>
+                {(allRequests.find(r => r.date === dateStr && (r.status === '수락' || r.status === 'accepted'))?.region || '♥').charAt(0)}
+              </span>
+            )}
+            {hasSched && (
+              <span style={{ fontSize: '7px', fontWeight: 800, color: '#0D47A1', background: 'rgba(100,160,255,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>
+                {(scheduleDatesMap[dateStr]?.[0]?.title || '일').charAt(0)}
+              </span>
+            )}
+            {hasPending && (
+              <span style={{ fontSize: '7px', fontWeight: 800, color: '#E65100', background: 'rgba(255,200,80,0.35)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>대</span>
+            )}
+            {hasNoDiary && !hasAccepted && (
+              <span style={{ fontSize: '7px', fontWeight: 800, color: '#BF360C', background: 'rgba(255,120,80,0.22)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>📔</span>
+            )}
           </div>
         </button>
       );
