@@ -11,16 +11,7 @@ interface ApplyProps {
   onSubmitted: () => void;
 }
 
-const THEMES = [
-  { label: '맛집탐방', emoji: '🍽️' },
-  { label: '카페', emoji: '☕' },
-  { label: '드라이브', emoji: '🚗' },
-  { label: '액티비티', emoji: '🎯' },
-  { label: '힐링', emoji: '🌿' },
-  { label: '문화생활', emoji: '🎬' },
-  { label: '집데이트', emoji: '🏠' },
-  { label: '로맨틱', emoji: '💕' },
-];
+const THEMES = ['맛집탐방', '카페', '드라이브', '액티비티', '힐링', '문화생활', '집데이트', '로맨틱'];
 
 export default function Apply({ currentNick, currentCoupleCode, members, showToast, onSubmitted }: ApplyProps) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -29,6 +20,7 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
   const [location, setLocation] = useState('');
   const [message, setMessage] = useState('');
 
+  // 강퇴된 멤버 제외하고 상대방 찾기
   const partner = members.find(m => m !== currentNick) || '';
 
   const handleSubmit = async () => {
@@ -40,8 +32,7 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
     await addDoc(collection(db, 'requests'), {
       fromUser: currentNick,
       toUser: partner,
-      date,
-      time,
+      date, time,
       theme: selTheme,
       region: location.trim(),
       subLocation: '',
@@ -53,9 +44,7 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
     });
 
     showToast('데이트 신청 완료 💕');
-    setSelTheme('');
-    setLocation('');
-    setMessage('');
+    setSelTheme(''); setLocation(''); setMessage('');
     onSubmitted();
   };
 
@@ -74,42 +63,57 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
       )}
 
       <div className="card">
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">날짜</label>
+        {/* 날짜 + 시간 - 모바일 오버플로우 방지 */}
+        <div className="form-group">
+          <label className="form-label">날짜 / 시간</label>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <input
               type="date"
               className="form-input"
               value={date}
               onChange={e => setDate(e.target.value)}
+              style={{ flex: '1 1 140px', minWidth: 0, fontSize: '15px' }}
             />
-          </div>
-          <div className="form-group">
-            <label className="form-label">시간</label>
             <input
               type="time"
               className="form-input"
               value={time}
               onChange={e => setTime(e.target.value)}
+              style={{ flex: '1 1 100px', minWidth: 0, fontSize: '15px' }}
             />
           </div>
         </div>
 
+        {/* 테마 — 이모지 없이, 4열 작은 칩 */}
         <div className="form-group">
           <label className="form-label">어떤 데이트?</label>
-          <div className="theme-grid">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
             {THEMES.map(t => (
               <button
-                key={t.label}
-                className={'theme-chip' + (selTheme === t.label ? ' selected' : '')}
-                onClick={() => setSelTheme(t.label)}
+                key={t}
+                onClick={() => setSelTheme(t)}
+                style={{
+                  padding: '7px 4px',
+                  borderRadius: '8px',
+                  border: '1.5px solid ' + (selTheme === t ? 'var(--rose)' : 'var(--border)'),
+                  background: selTheme === t ? 'var(--rose4)' : 'white',
+                  color: selTheme === t ? 'var(--rose)' : 'var(--text2)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  textAlign: 'center',
+                  lineHeight: 1.3,
+                  transition: 'all 0.15s',
+                }}
               >
-                {t.emoji} {t.label}
+                {t}
               </button>
             ))}
           </div>
         </div>
 
+        {/* 장소 */}
         <div className="form-group">
           <label className="form-label">어디서?</label>
           <input
@@ -121,6 +125,7 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
           />
         </div>
 
+        {/* 한마디 */}
         <div className="form-group">
           <label className="form-label">한마디 <span style={{ color: 'var(--text3)', fontWeight: 400, fontSize: '12px' }}>(선택)</span></label>
           <textarea

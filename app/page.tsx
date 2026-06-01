@@ -20,9 +20,10 @@ import Apply from '@/components/pages/Apply';
 import CalendarPage from '@/components/pages/CalendarPage';
 import MapPage from '@/components/pages/MapPage';
 import MyPage from '@/components/pages/MyPage';
+import ChatPage from '@/components/pages/ChatPage';
 
 type AuthState = 'loading' | 'login' | 'couple' | 'app';
-type PageId = 'home' | 'apply' | 'calendar' | 'map' | 'my';
+type PageId = 'home' | 'apply' | 'chat' | 'calendar' | 'map' | 'my';
 
 interface ChecklistItem { text: string; done: boolean; important: boolean; }
 interface Request {
@@ -43,10 +44,10 @@ interface Message {
   id: string; fromUser: string; coupleCode: string; text: string;
   createdAt: { seconds?: number } | null;
   readAt: { seconds?: number } | null;
-  selfDestruct: boolean;
+  selfDestruct?: boolean;
 }
 interface Schedule { id: string; title: string; date: string; description?: string; createdBy?: string; roomId: string; }
-interface Bucketlist { id: string; roomId: string; region: string; regionName?: string; createdBy?: string; createdAt?: { toDate?: () => Date; seconds?: number }; memo?: string; }
+interface Bucketlist { id: string; roomId: string; region: string; regionName?: string; memo?: string; }
 
 export default function PageRoot() {
   const [authState, setAuthState] = useState<AuthState>('loading');
@@ -68,10 +69,8 @@ export default function PageRoot() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState('');
   const confirmCbRef = useRef<(() => void) | null>(null);
-
   const { toast, showToast } = useToast();
 
-  // Diary modal
   const [diaryModalOpen, setDiaryModalOpen] = useState(false);
   const [diaryReqId, setDiaryReqId] = useState('');
   const [diaryDate, setDiaryDate] = useState('');
@@ -79,8 +78,6 @@ export default function PageRoot() {
   const [diaryContent, setDiaryContent] = useState('');
   const [diaryStar, setDiaryStar] = useState(5);
   const [diaryTags, setDiaryTags] = useState('');
-
-  // Diary shortcut modal
   const [diaryShortcutOpen, setDiaryShortcutOpen] = useState(false);
   const [diaryShortcutCustomDate, setDiaryShortcutCustomDate] = useState('');
 
@@ -88,17 +85,20 @@ export default function PageRoot() {
   const kickListenerRef = useRef<(() => void) | null>(null);
 
   const showConfirm = useCallback((msg: string, onOk: () => void) => {
-    setConfirmMsg(msg);
-    confirmCbRef.current = onOk;
-    setConfirmOpen(true);
+    setConfirmMsg(msg); confirmCbRef.current = onOk; setConfirmOpen(true);
   }, []);
 
+  // kicked 멤버 필터링 포함
   const loadRoomMembers = useCallback(async (coupleCode: string) => {
-    const snap = await getDocs(query(collection(db, 'users'), where('coupleCode', '==', coupleCode)));
+    const [usersSnap, roomDoc] = await Promise.all([
+      getDocs(query(collection(db, 'users'), where('coupleCode', '==', coupleCode))),
+      getDoc(doc(db, 'rooms', coupleCode)),
+    ]);
+    const kicked: string[] = roomDoc.exists() ? (roomDoc.data().kickedMembers || []) : [];
     const seen = new Set<string>();
-    const mems = snap.docs
+    const mems = usersSnap.docs
       .map(d => d.data().nickname || d.id)
-      .filter(n => { if (seen.has(n)) return false; seen.add(n); return true; });
+      .filter(n => { if (seen.has(n) || kicked.includes(n)) return false; seen.add(n); return true; });
     setMembers(mems);
   }, []);
 
@@ -126,8 +126,10 @@ export default function PageRoot() {
     const u4 = onSnapshot(query(collection(db, 'anniversaries'), where('coupleCode', '==', code)), snap => {
       setAllAnniversaries(snap.docs.map(d => ({ id: d.id, ...d.data() } as Anniversary)).sort((a, b) => (a.date || '').localeCompare(b.date || '')));
     });
-    const u5 = onSnapshot(query(collection(db, 'messages'), where('coupleCode', '==', code)), snap => {
-      setAllMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as Message)).sort((a, b) => ((a.createdAt as { seconds?: number })?.seconds || 0) - ((b.createdAt as { seconds?: number })?.seconds || 0)));
+    // 채팅: notes 컬렉션 사용 (Firestore 권한 보장)
+    const u5 = onSnapshot(query(collection(db, 'notes'), where('coupleCode', '==', code)), snap => {
+      setAllMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as Message))
+        .sort((a, b) => ((a.createdAt as { seconds?: number })?.seconds || 0) - ((b.createdAt as { seconds?: number })?.seconds || 0)));
     });
     const u6 = onSnapshot(query(collection(db, 'schedules'), where('roomId', '==', code)), snap => {
       setAllSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() } as Schedule)).sort((a, b) => (a.date || '').localeCompare(b.date || '')));
@@ -136,42 +138,32 @@ export default function PageRoot() {
       const seenBucket = new Map<string, string>();
       snap.docs.forEach(d => {
         const key = d.data().regionName || d.data().region || d.id;
-        if (seenBucket.has(key)) { deleteDoc(doc(db, 'bucketlist', d.id)).catch(() => {}); }
-        else { seenBucket.set(key, d.id); }
+        if (seenBucket.has(key)) deleteDoc(doc(db, 'bucketlist', d.id)).catch(() => {});
+        else seenBucket.set(key, d.id);
       });
       setAllBucketlist(snap.docs
-        .filter((d, idx, arr) => arr.findIndex(x => (x.data().regionName || x.data().region) === (d.data().regionName || d.data().region)) === idx)
+        .filter((d, i, arr) => arr.findIndex(x => (x.data().regionName || x.data().region) === (d.data().regionName || d.data().region)) === i)
         .map(d => ({ id: d.id, ...d.data() } as Bucketlist)));
     });
     unsubscribersRef.current = [u1, u2, u3, u4, u5, u6, u7];
   }, []);
 
   const enterApp = useCallback((user: User, nick: string, code: string) => {
-    setCurrentUser(user);
-    setCurrentNick(nick);
-    setCurrentCoupleCode(code);
-    setAuthState('app');
-
+    setCurrentUser(user); setCurrentNick(nick); setCurrentCoupleCode(code); setAuthState('app');
     if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
     kickListenerRef.current = onSnapshot(doc(db, 'rooms', code), snap => {
       if (snap.exists()) {
         const kicked: string[] = snap.data().kickedMembers || [];
         if (kicked.includes(nick)) {
-          unsubscribersRef.current.forEach(u => u());
-          unsubscribersRef.current = [];
+          unsubscribersRef.current.forEach(u => u()); unsubscribersRef.current = [];
           if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
-          localStorage.removeItem('nick_' + user.uid);
-          localStorage.removeItem('couple_' + user.uid);
-          setCurrentNick('');
-          setCurrentCoupleCode('');
-          setAuthState('couple');
+          localStorage.removeItem('nick_' + user.uid); localStorage.removeItem('couple_' + user.uid);
+          setCurrentNick(''); setCurrentCoupleCode(''); setAuthState('couple');
           showToast('방에서 내보내졌어요', true);
         }
       }
     });
-
-    loadAll(code);
-    loadRoomMembers(code);
+    loadAll(code); loadRoomMembers(code);
   }, [loadAll, loadRoomMembers, showToast]);
 
   useEffect(() => {
@@ -185,8 +177,7 @@ export default function PageRoot() {
             if (data.coupleCode && data.nickname) {
               localStorage.setItem('nick_' + user.uid, data.nickname);
               localStorage.setItem('couple_' + user.uid, data.coupleCode);
-              enterApp(user, data.nickname, data.coupleCode);
-              return;
+              enterApp(user, data.nickname, data.coupleCode); return;
             }
           }
         } catch { /* fallback */ }
@@ -196,48 +187,35 @@ export default function PageRoot() {
           setDoc(doc(db, 'users', user.uid), { uid: user.uid, nickname: savedNick, coupleCode: savedCouple, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
           setDoc(doc(db, 'rooms', savedCouple), { members: arrayUnion(user.uid) }, { merge: true }).catch(() => {});
           enterApp(user, savedNick, savedCouple);
-        } else {
-          setAuthState('couple');
-        }
-      } else {
-        setAuthState('login');
-      }
+        } else { setAuthState('couple'); }
+      } else { setAuthState('login'); }
     });
     return () => unsub();
   }, [enterApp, showToast]);
 
   const handleLogout = async () => {
-    unsubscribersRef.current.forEach(u => u());
-    unsubscribersRef.current = [];
+    unsubscribersRef.current.forEach(u => u()); unsubscribersRef.current = [];
     if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
     await signOut(auth);
-    setCurrentUser(null);
-    setCurrentNick('');
-    setCurrentCoupleCode('');
-    setAuthState('login');
+    setCurrentUser(null); setCurrentNick(''); setCurrentCoupleCode(''); setAuthState('login');
   };
 
   const handleSwitchRoom = useCallback(async (code: string, nick: string) => {
     if (!currentUser) return;
-    const email = currentUser.email || '';
-    const photoURL = currentUser.photoURL || '';
+    const email = currentUser.email || '', photoURL = currentUser.photoURL || '';
     await setDoc(doc(db, 'users', currentUser.uid), { uid: currentUser.uid, nickname: nick, coupleCode: code, email, photoURL, updatedAt: serverTimestamp(), kicked: false }, { merge: true });
     await setDoc(doc(db, 'users', nick), { uid: currentUser.uid, nickname: nick, coupleCode: code, email, photoURL, kicked: false }, { merge: true });
     await setDoc(doc(db, 'rooms', code), { members: arrayUnion(currentUser.uid) }, { merge: true });
     localStorage.setItem('nick_' + currentUser.uid, nick);
     localStorage.setItem('couple_' + currentUser.uid, code);
-    setCurrentNick(nick);
-    setCurrentCoupleCode(code);
-    loadAll(code);
-    loadRoomMembers(code);
-    showToast('방에 입장했어요 💕');
+    setCurrentNick(nick); setCurrentCoupleCode(code);
+    loadAll(code); loadRoomMembers(code); showToast('방에 입장했어요 💕');
   }, [currentUser, loadAll, loadRoomMembers, showToast]);
 
   const handleOpenDiary = useCallback((reqId: string, date?: string) => {
     setDiaryReqId(reqId || '');
     setDiaryDate(date || new Date().toISOString().split('T')[0]);
-    setDiaryTitle(''); setDiaryContent(''); setDiaryTags('');
-    setDiaryStar(5);
+    setDiaryTitle(''); setDiaryContent(''); setDiaryTags(''); setDiaryStar(5);
     setDiaryModalOpen(true);
   }, []);
 
@@ -245,31 +223,30 @@ export default function PageRoot() {
     if (!diaryTitle.trim() || !diaryContent.trim()) { showToast('제목과 내용을 입력해주세요', true); return; }
     const req = allRequests.find(r => r.id === diaryReqId);
     await addDoc(collection(db, 'diaries'), {
-      reqId: diaryReqId,
-      title: diaryTitle.trim(), content: diaryContent.trim(),
+      reqId: diaryReqId, title: diaryTitle.trim(), content: diaryContent.trim(),
       date: req ? req.date : (diaryDate || new Date().toISOString().split('T')[0]),
-      star: diaryStar,
-      tags: diaryTags.split(',').map(t => t.trim()).filter(Boolean),
-      author: currentNick, comments: [],
-      coupleCode: currentCoupleCode, createdAt: serverTimestamp()
+      star: diaryStar, tags: diaryTags.split(',').map(t => t.trim()).filter(Boolean),
+      author: currentNick, comments: [], coupleCode: currentCoupleCode, createdAt: serverTimestamp()
     });
-    setDiaryModalOpen(false);
-    setDiaryTitle(''); setDiaryContent(''); setDiaryTags(''); setDiaryStar(5);
+    setDiaryModalOpen(false); setDiaryTitle(''); setDiaryContent(''); setDiaryTags(''); setDiaryStar(5);
     showToast('일기가 저장됐어요! 📔');
-    setActiveMyTab('diaries');
-    setActivePage('my');
+    setActiveMyTab('diaries'); setActivePage('my');
   };
 
+  // 채팅 전송 — notes 컬렉션에 저장
   const handleSendMessage = useCallback(async (text: string, selfDestruct: boolean) => {
-    await addDoc(collection(db, 'messages'), {
+    const partner = members.find(m => m !== currentNick) || '';
+    await addDoc(collection(db, 'notes'), {
       fromUser: currentNick,
+      toUser: partner,
       coupleCode: currentCoupleCode,
       text,
       createdAt: serverTimestamp(),
       readAt: null,
       selfDestruct,
+      chatMode: true,
     });
-  }, [currentNick, currentCoupleCode]);
+  }, [currentNick, currentCoupleCode, members]);
 
   const unreadMsgCount = allMessages.filter(m => m.fromUser !== currentNick && !m.readAt).length;
 
@@ -277,23 +254,11 @@ export default function PageRoot() {
   const pastAccepted = allRequests.filter(r => (r.status === '수락' || r.status === 'accepted') && r.date <= todayStr).sort((a, b) => b.date.localeCompare(a.date));
   const noDiary = pastAccepted.filter(r => !allDiaries.some(d => d.reqId === r.id || d.date === r.date));
 
-  if (authState === 'loading') {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white' }}>
-        <div style={{ fontSize: '32px' }}>💕</div>
-      </div>
-    );
-  }
+  if (authState === 'loading') return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ fontSize: '32px' }}>💕</div></div>;
   if (authState === 'login') return <AuthScreen onAuthSuccess={() => {}} />;
   if (authState === 'couple') {
     if (!currentUser) return <AuthScreen onAuthSuccess={() => {}} />;
-    return (
-      <CoupleSetup
-        currentUser={{ uid: currentUser.uid, email: currentUser.email, displayName: currentUser.displayName, photoURL: currentUser.photoURL }}
-        onEnterApp={(nick, code) => { enterApp(currentUser, nick, code); }}
-        showToast={showToast}
-      />
-    );
+    return <CoupleSetup currentUser={{ uid: currentUser.uid, email: currentUser.email, displayName: currentUser.displayName, photoURL: currentUser.photoURL }} onEnterApp={(nick, code) => { enterApp(currentUser, nick, code); }} showToast={showToast} />;
   }
   if (!currentUser) return null;
 
@@ -304,11 +269,12 @@ export default function PageRoot() {
         {activePage === 'home' && (
           <Home
             currentNick={currentNick}
+            currentCoupleCode={currentCoupleCode}
             allRequests={allRequests}
             allDiaries={allDiaries}
             allMessages={allMessages}
             allAnniversaries={allAnniversaries}
-            onNavigate={page => setActivePage(page)}
+            onNavigate={page => setActivePage(page as PageId)}
             onOpenDiaryShortcut={() => { setDiaryShortcutCustomDate(todayStr); setDiaryShortcutOpen(true); }}
             showToast={showToast}
             showConfirm={showConfirm}
@@ -316,66 +282,29 @@ export default function PageRoot() {
           />
         )}
         {activePage === 'apply' && (
-          <Apply
-            currentNick={currentNick}
-            currentCoupleCode={currentCoupleCode}
-            members={members}
-            showToast={showToast}
-            onSubmitted={() => setActivePage('home')}
-          />
+          <Apply currentNick={currentNick} currentCoupleCode={currentCoupleCode} members={members} showToast={showToast} onSubmitted={() => setActivePage('home')} />
+        )}
+        {activePage === 'chat' && (
+          <ChatPage currentNick={currentNick} allMessages={allMessages} onSendMessage={handleSendMessage} />
         )}
         {activePage === 'calendar' && (
-          <CalendarPage
-            currentNick={currentNick}
-            currentCoupleCode={currentCoupleCode}
-            allRequests={allRequests}
-            allDiaries={allDiaries}
-            allAnniversaries={allAnniversaries}
-            allSchedules={allSchedules}
-            showToast={showToast}
-            onOpenDiary={handleOpenDiary}
-          />
+          <CalendarPage currentNick={currentNick} currentCoupleCode={currentCoupleCode} allRequests={allRequests} allDiaries={allDiaries} allAnniversaries={allAnniversaries} allSchedules={allSchedules} showToast={showToast} onOpenDiary={handleOpenDiary} />
         )}
         {activePage === 'map' && (
-          <MapPage
-            currentNick={currentNick}
-            currentCoupleCode={currentCoupleCode}
-            allPlaces={allPlaces}
-            allBucketlist={allBucketlist}
-            allRequests={allRequests}
-            allAnniversaries={allAnniversaries}
-            allDiaries={allDiaries}
-            showToast={showToast}
-            showConfirm={showConfirm}
-          />
+          <MapPage currentNick={currentNick} currentCoupleCode={currentCoupleCode} allPlaces={allPlaces} allBucketlist={allBucketlist} allRequests={allRequests} allAnniversaries={allAnniversaries} allDiaries={allDiaries} showToast={showToast} showConfirm={showConfirm} />
         )}
         {activePage === 'my' && (
           <MyPage
             currentUser={{ uid: currentUser.uid, email: currentUser.email, photoURL: currentUser.photoURL }}
-            currentNick={currentNick}
-            currentCoupleCode={currentCoupleCode}
-            allRequests={allRequests}
-            allDiaries={allDiaries}
-            allMessages={allMessages}
-            allPlaces={allPlaces}
-            activeMyTab={activeMyTab}
-            onChangeNick={newNick => setCurrentNick(newNick)}
-            onSwitchRoom={handleSwitchRoom}
-            showToast={showToast}
-            showConfirm={showConfirm}
-            onOpenDiary={handleOpenDiary}
-            onSendMessage={handleSendMessage}
+            currentNick={currentNick} currentCoupleCode={currentCoupleCode}
+            allRequests={allRequests} allDiaries={allDiaries} allMessages={allMessages} allPlaces={allPlaces}
+            activeMyTab={activeMyTab} onChangeNick={newNick => setCurrentNick(newNick)}
+            onSwitchRoom={handleSwitchRoom} showToast={showToast} showConfirm={showConfirm}
+            onOpenDiary={handleOpenDiary} onSendMessage={handleSendMessage}
           />
         )}
       </main>
-      <BottomNav
-        activePage={activePage}
-        onNavigate={page => {
-          setActivePage(page);
-          if (page !== 'my') setActiveMyTab('received');
-        }}
-        unreadMsgCount={unreadMsgCount}
-      />
+      <BottomNav activePage={activePage} onNavigate={page => { setActivePage(page); if (page !== 'my') setActiveMyTab('received'); }} unreadMsgCount={unreadMsgCount} />
 
       {/* Diary Modal */}
       <div className={'modal-bg' + (diaryModalOpen ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) setDiaryModalOpen(false); }}>
@@ -393,9 +322,7 @@ export default function PageRoot() {
           <div className="form-group">
             <label className="form-label">별점</label>
             <div style={{ display: 'flex', gap: '6px', fontSize: '24px', cursor: 'pointer' }}>
-              {[1, 2, 3, 4, 5].map(n => (
-                <span key={n} onClick={() => setDiaryStar(n)} style={{ color: n <= diaryStar ? '#F4A300' : '#ccc' }}>{n <= diaryStar ? '★' : '☆'}</span>
-              ))}
+              {[1,2,3,4,5].map(n => <span key={n} onClick={() => setDiaryStar(n)} style={{ color: n <= diaryStar ? '#F4A300' : '#ccc' }}>{n <= diaryStar ? '★' : '☆'}</span>)}
             </div>
           </div>
           <div className="form-group">
@@ -432,20 +359,14 @@ export default function PageRoot() {
             <input type="date" className="form-input" value={diaryShortcutCustomDate} onChange={e => setDiaryShortcutCustomDate(e.target.value)} style={{ marginBottom: '10px' }} />
             <button className="btn btn-rose btn-full" onClick={() => {
               const req = allRequests.find(r => r.date === diaryShortcutCustomDate && (r.status === '수락' || r.status === 'accepted'));
-              setDiaryShortcutOpen(false);
-              handleOpenDiary(req ? req.id : '', diaryShortcutCustomDate);
+              setDiaryShortcutOpen(false); handleOpenDiary(req ? req.id : '', diaryShortcutCustomDate);
             }}>이 날짜로 일기 쓰기</button>
           </div>
           <button className="btn btn-outline btn-full" onClick={() => setDiaryShortcutOpen(false)}>취소</button>
         </div>
       </div>
 
-      <ConfirmModal
-        open={confirmOpen}
-        message={confirmMsg}
-        onOk={() => { setConfirmOpen(false); confirmCbRef.current?.(); }}
-        onCancel={() => setConfirmOpen(false)}
-      />
+      <ConfirmModal open={confirmOpen} message={confirmMsg} onOk={() => { setConfirmOpen(false); confirmCbRef.current?.(); }} onCancel={() => setConfirmOpen(false)} />
       <Toast message={toast.message} isError={toast.isError} visible={toast.visible} />
     </>
   );

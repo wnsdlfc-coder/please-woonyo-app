@@ -25,7 +25,7 @@ interface Message {
   id: string; fromUser: string; text: string;
   createdAt: { seconds?: number } | null;
   readAt: { seconds?: number } | null;
-  selfDestruct: boolean;
+  selfDestruct?: boolean;
 }
 interface Member { nick: string; email: string; uid: string; }
 
@@ -46,7 +46,7 @@ interface MyPageProps {
   onSendMessage: (text: string, selfDestruct: boolean) => void;
 }
 
-type MyTab = 'chat' | 'received' | 'sent' | 'dates' | 'diaries' | 'stats';
+type MyTab = 'received' | 'sent' | 'dates' | 'diaries' | 'stats';
 type FilterType = '전체' | '대기' | '수락' | '반려';
 
 const THEME_EMOJI: Record<string, string> = {
@@ -71,12 +71,10 @@ export default function MyPage({
   const [nickErr, setNickErr] = useState('');
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
-  // 채팅
-  const [chatInput, setChatInput] = useState('');
-  const [selfDestructMode, setSelfDestructMode] = useState(false);
-  const [countdowns, setCountdowns] = useState<Record<string, number>>({});
-  const timerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({});
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  // 햄버거 탭 메뉴
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
+  // 커플코드 표시 여부
+  const [codeVisible, setCodeVisible] = useState(false);
 
   // 다른 방 입장
   const [showJoinOtherModal, setShowJoinOtherModal] = useState(false);
@@ -95,51 +93,6 @@ export default function MyPage({
   useEffect(() => { setMyTab((activeMyTab as MyTab) || 'received'); }, [activeMyTab]);
   useEffect(() => { loadRoomInfo(); }, [currentCoupleCode, currentNick]); // eslint-disable-line
 
-  // 채팅: 탭 열릴 때 읽음 처리
-  useEffect(() => {
-    if (myTab !== 'chat') return;
-    const unread = allMessages.filter(m => m.fromUser !== currentNick && !m.readAt);
-    unread.forEach(m => {
-      updateDoc(doc(db, 'messages', m.id), { readAt: serverTimestamp() }).catch(() => {});
-    });
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-  }, [myTab, allMessages, currentNick]);
-
-  // 채팅: 자동삭제 타이머
-  useEffect(() => {
-    if (myTab !== 'chat') return;
-    const toDestruct = allMessages.filter(
-      m => m.selfDestruct && m.fromUser !== currentNick && m.readAt && !timerRefs.current[m.id]
-    );
-    toDestruct.forEach(m => {
-      const readSec = (m.readAt as { seconds?: number })?.seconds;
-      const readTime = readSec ? readSec * 1000 : Date.now();
-      const remaining = Math.max(0, 10000 - (Date.now() - readTime));
-      if (remaining <= 0) {
-        deleteDoc(doc(db, 'messages', m.id)).catch(() => {});
-        return;
-      }
-      setCountdowns(prev => ({ ...prev, [m.id]: Math.ceil(remaining / 1000) }));
-      timerRefs.current[m.id] = setInterval(() => {
-        setCountdowns(prev => {
-          const next = (prev[m.id] || 1) - 1;
-          if (next <= 0) {
-            clearInterval(timerRefs.current[m.id]);
-            delete timerRefs.current[m.id];
-            deleteDoc(doc(db, 'messages', m.id)).catch(() => {});
-            const updated = { ...prev };
-            delete updated[m.id];
-            return updated;
-          }
-          return { ...prev, [m.id]: next };
-        });
-      }, 1000);
-    });
-  }, [allMessages, currentNick, myTab]);
-
-  useEffect(() => {
-    return () => { Object.values(timerRefs.current).forEach(clearInterval); };
-  }, []);
 
   const loadRoomInfo = async () => {
     const roomDoc = await getDoc(doc(db, 'rooms', currentCoupleCode));
@@ -274,12 +227,6 @@ export default function MyPage({
     showToast('댓글을 달았어요!');
   };
 
-  const handleSendChat = useCallback(() => {
-    if (!chatInput.trim()) return;
-    onSendMessage(chatInput.trim(), selfDestructMode);
-    setChatInput('');
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-  }, [chatInput, selfDestructMode, onSendMessage]);
 
   function statusBadge(status: string) {
     const map: Record<string, string> = { '대기': 's-pending', '수락': 's-accepted', '거절': 's-rejected', '취소': 's-canceled', '반려': 's-returned' };
@@ -344,73 +291,6 @@ export default function MyPage({
   const filterReqs = (list: Request[]) => myFilter === '전체' ? list : list.filter(r => r.status === myFilter);
 
   const renderContent = () => {
-    // ── 채팅 ──
-    if (myTab === 'chat') {
-      return (
-        <div>
-          <div className="chat-messages" style={{ maxHeight: '52vh', overflowY: 'auto', marginBottom: '12px' }}>
-            {allMessages.length === 0 && (
-              <div className="empty-state">아직 대화가 없어요 💬<br />먼저 말을 걸어봐요</div>
-            )}
-            {allMessages.map(m => {
-              const isMine = m.fromUser === currentNick;
-              const countdown = countdowns[m.id];
-              return (
-                <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start', marginBottom: '10px' }}>
-                  <div className={`chat-bubble ${isMine ? 'mine' : 'theirs'}`}>
-                    {m.selfDestruct && (
-                      <div className="chat-destruct-label">
-                        💣 {countdown ? `${countdown}초 후 삭제` : m.readAt ? '곧 삭제...' : '읽으면 10초 후 삭제'}
-                      </div>
-                    )}
-                    {m.text}
-                  </div>
-                  <div className={`chat-time ${isMine ? 'mine' : 'theirs'}`}>
-                    {formatTime(m.createdAt as Parameters<typeof formatTime>[0])}
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={chatEndRef} />
-          </div>
-
-          <button
-            onClick={() => setSelfDestructMode(v => !v)}
-            style={{
-              padding: '5px 14px', borderRadius: '20px', marginBottom: '8px',
-              border: '1.5px solid ' + (selfDestructMode ? 'var(--rose)' : 'var(--border)'),
-              background: selfDestructMode ? 'var(--rose4)' : 'transparent',
-              color: selfDestructMode ? 'var(--rose)' : 'var(--text3)',
-              fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            {selfDestructMode ? '💣 자동삭제 ON — 읽고 10초 후 삭제' : '💣 자동삭제'}
-          </button>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="메시지를 입력해요..."
-              value={chatInput}
-              onChange={e => setChatInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleSendChat(); }}
-              style={{ flex: 1, borderRadius: '24px', padding: '10px 16px' }}
-            />
-            <button
-              onClick={handleSendChat}
-              style={{
-                width: '44px', height: '44px', borderRadius: '50%',
-                background: 'var(--rose)', border: 'none', color: 'white',
-                fontSize: '18px', cursor: 'pointer', flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >↑</button>
-          </div>
-        </div>
-      );
-    }
-
     // ── 받은 신청 ──
     if (myTab === 'received') {
       const list = filterReqs(allRequests.filter(r => r.toUser === currentNick));
@@ -581,11 +461,22 @@ export default function MyPage({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
           <div>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '4px' }}>COUPLE CODE</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '6px', color: 'var(--rose)', fontVariantNumeric: 'tabular-nums' }}>{currentCoupleCode}</div>
+            {codeVisible ? (
+              <div style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '6px', color: 'var(--rose)', fontVariantNumeric: 'tabular-nums' }}>{currentCoupleCode}</div>
+            ) : (
+              <div style={{ fontSize: '14px', color: 'var(--text3)' }}>••••••</div>
+            )}
           </div>
-          <button className="btn btn-outline btn-sm" onClick={() => {
-            navigator.clipboard.writeText(currentCoupleCode).then(() => showToast('코드를 복사했어요! 📋')).catch(() => showToast(currentCoupleCode));
-          }}>복사 📋</button>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button className="btn btn-outline btn-sm" onClick={() => setCodeVisible(v => !v)}>
+              {codeVisible ? '숨기기' : '코드 보기'}
+            </button>
+            {codeVisible && (
+              <button className="btn btn-outline btn-sm" onClick={() => {
+                navigator.clipboard.writeText(currentCoupleCode).then(() => showToast('코드를 복사했어요! 📋')).catch(() => showToast(currentCoupleCode));
+              }}>복사</button>
+            )}
+          </div>
         </div>
         <div style={{ marginBottom: '14px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '1px', marginBottom: '8px' }}>MEMBERS</div>
@@ -622,21 +513,36 @@ export default function MyPage({
         </div>
       </div>
 
-      {/* 탭 */}
-      <div className="tab-nav" style={{ overflowX: 'auto' }}>
-        {([
-          ['chat', '💬 채팅'],
-          ['received', '받은 신청'],
-          ['sent', '보낸 신청'],
-          ['dates', '데이트 기록'],
-          ['diaries', '일기'],
-          ['stats', '통계'],
-        ] as [MyTab, string][]).map(([tab, label]) => (
-          <button key={tab} className={'tab-btn' + (myTab === tab ? ' active' : '')} onClick={() => setMyTab(tab)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* 햄버거 탭 메뉴 */}
+      {(() => {
+        const TAB_LIST: [MyTab, string][] = [
+          ['received', '받은 신청'], ['sent', '보낸 신청'],
+          ['dates', '데이트 기록'], ['diaries', '일기'], ['stats', '통계'],
+        ];
+        const currentLabel = TAB_LIST.find(([t]) => t === myTab)?.[1] || '';
+        return (
+          <div style={{ position: 'relative', marginBottom: '16px' }}>
+            <button
+              onClick={() => setTabMenuOpen(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid var(--border)', background: 'white', cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px', fontWeight: 700, color: 'var(--text)' }}
+            >
+              <span style={{ fontSize: '16px' }}>☰</span>
+              <span style={{ flex: 1, textAlign: 'left', color: 'var(--rose)' }}>{currentLabel}</span>
+              <span style={{ opacity: 0.4, fontSize: '12px' }}>{tabMenuOpen ? '▲' : '▼'}</span>
+            </button>
+            {tabMenuOpen && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'white', border: '1.5px solid var(--border)', borderRadius: '10px', zIndex: 50, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+                {TAB_LIST.map(([tab, label]) => (
+                  <button key={tab} onClick={() => { setMyTab(tab); setTabMenuOpen(false); }}
+                    style={{ display: 'block', width: '100%', padding: '12px 16px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--border)', background: myTab === tab ? 'var(--rose4)' : 'white', color: myTab === tab ? 'var(--rose)' : 'var(--text)', fontWeight: myTab === tab ? 800 : 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: '14px' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {(myTab === 'received' || myTab === 'sent') && (
         <div className="filter-row">
