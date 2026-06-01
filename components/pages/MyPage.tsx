@@ -5,7 +5,8 @@ import {
   collection, doc, setDoc, updateDoc, deleteDoc, addDoc,
   getDocs, query, where, serverTimestamp, getDoc
 } from 'firebase/firestore';
-import { arrayUnion, arrayRemove } from 'firebase/firestore';
+import { arrayUnion } from 'firebase/firestore';
+
 import { updateProfile } from 'firebase/auth';
 import { formatTime } from '@/lib/utils';
 
@@ -59,7 +60,6 @@ export default function MyPage({
   const [myFilter, setMyFilter] = useState<FilterType>('전체');
   const [members, setMembers] = useState<Member[]>([]);
   const [roomTitle, setRoomTitle] = useState('우리의 방');
-  const [roomOwnerId, setRoomOwnerId] = useState('');
   const [editRoomTitle, setEditRoomTitle] = useState(false);
   const [roomTitleInput, setRoomTitleInput] = useState('');
   const [changeNickOpen, setChangeNickOpen] = useState(false);
@@ -101,13 +101,32 @@ export default function MyPage({
     const roomData = roomDoc.exists() ? roomDoc.data() : {};
     setRoomTitle(roomData.title || '우리의 방');
     setRoomTitleInput(roomData.title || '우리의 방');
-    setRoomOwnerId(roomData.ownerId || '');
+    const kickedMembers: string[] = roomData.kickedMembers || [];
     const membersSnap = await getDocs(query(collection(db, 'users'), where('coupleCode', '==', currentCoupleCode)));
     const seen = new Set<string>();
     const mems: Member[] = membersSnap.docs
       .map(d => ({ nick: d.data().nickname || d.id, email: d.data().email || '', uid: d.data().uid || '' }))
-      .filter(m => { if (seen.has(m.nick)) return false; seen.add(m.nick); return true; });
+      .filter(m => {
+        if (seen.has(m.nick) || kickedMembers.includes(m.nick)) return false;
+        seen.add(m.nick);
+        return true;
+      });
     setMembers(mems);
+  };
+
+  const handleKick = async (nick: string) => {
+    showConfirm(`${nick}님을 방에서 내보낼까요?`, async () => {
+      try {
+        await updateDoc(doc(db, 'rooms', currentCoupleCode), {
+          kickedMembers: arrayUnion(nick),
+        });
+        showToast(`${nick}님을 내보냈어요`);
+        loadRoomInfo();
+      } catch (e: unknown) {
+        const err = e as { message?: string };
+        showToast('내보내기 실패: ' + (err.message || ''), true);
+      }
+    });
   };
 
   const handleSaveRoomTitle = async () => {
@@ -143,22 +162,6 @@ export default function MyPage({
     }
   };
 
-  const handleKick = async (nick: string, uid: string) => {
-    showConfirm(`${nick}님을 방에서 내보낼까요?`, async () => {
-      try {
-        if (uid) {
-          await setDoc(doc(db, 'users', uid), { coupleCode: '', kicked: true }, { merge: true });
-          await updateDoc(doc(db, 'rooms', currentCoupleCode), { members: arrayRemove(uid) });
-        }
-        await setDoc(doc(db, 'users', nick), { coupleCode: '', kicked: true }, { merge: true });
-        showToast(`${nick}님을 내보냈어요`);
-        loadRoomInfo();
-      } catch (e: unknown) {
-        const err = e as { message?: string };
-        showToast('강퇴 실패: ' + (err.message || ''), true);
-      }
-    });
-  };
 
   const handleJoinOtherVerify = async () => {
     if (joinOtherCode.length !== 6) { showToast('6자리 코드를 입력해주세요', true); return; }
@@ -177,6 +180,10 @@ export default function MyPage({
     let nick = joinOtherNick;
     if (nick === '__new__') nick = joinOtherNewNick.trim();
     if (!nick) { showToast('닉네임을 선택하거나 입력해주세요', true); return; }
+    if (!joinOtherMembers.includes(nick) && joinOtherMembers.length >= 2) {
+      showToast('이 방은 이미 2명이에요 💑', true);
+      return;
+    }
     setShowJoinOtherModal(false);
     onSwitchRoom(joinOtherCode, nick);
   };
@@ -370,8 +377,6 @@ export default function MyPage({
     }
   };
 
-  const isOwner = roomOwnerId && currentUser && roomOwnerId === currentUser.uid;
-
   return (
     <div id="page-my" className="page active">
       <div className="page-title">마이페이지</div>
@@ -449,11 +454,11 @@ export default function MyPage({
             {members.map(m => (
               <div key={m.nick} style={{ background: 'var(--rose4)', borderRadius: '12px', padding: '8px 12px', flex: 1, minWidth: '120px' }}>
                 <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--rose)' }}>
-                  {roomOwnerId && m.uid && m.uid === roomOwnerId ? '👑 ' : ''}{m.nick}
+                  {m.nick}
                 </div>
                 {m.email && <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '2px', wordBreak: 'break-all' }}>{m.email}</div>}
-                {isOwner && m.nick !== currentNick && (
-                  <button className="btn btn-outline btn-xs" style={{ marginTop: '6px', fontSize: '11px', color: '#e74c3c', borderColor: '#e74c3c' }} onClick={() => handleKick(m.nick, m.uid)}>강퇴</button>
+                {m.nick !== currentNick && (
+                  <button className="btn btn-outline btn-xs" style={{ marginTop: '6px', fontSize: '11px', color: '#e74c3c', borderColor: '#e74c3c' }} onClick={() => handleKick(m.nick)}>내보내기</button>
                 )}
               </div>
             ))}

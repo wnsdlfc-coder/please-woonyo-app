@@ -101,6 +101,10 @@ export default function CoupleSetup({ currentUser, onEnterApp, showToast }: Coup
     let nick = joinSelectedNick;
     if (nick === '__new__') nick = joinNewNick.trim();
     if (!nick) { showToast('이름을 선택하거나 입력해주세요', true); return; }
+    if (!joinMembers.includes(nick) && joinMembers.length >= 2) {
+      showToast('이 방은 이미 2명이에요 💑', true);
+      return;
+    }
     await saveCoupleCode(joinCode, nick);
   };
 

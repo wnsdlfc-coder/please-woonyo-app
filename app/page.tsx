@@ -165,15 +165,21 @@ export default function PageRoot() {
     setCurrentCoupleCode(code);
     setAuthState('app');
 
-    // Kick listener
     if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
-    kickListenerRef.current = onSnapshot(doc(db, 'users', user.uid), snap => {
-      if (snap.exists() && snap.data().kicked) {
-        unsubscribersRef.current.forEach(u => u());
-        unsubscribersRef.current = [];
-        if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
-        setAuthState('couple');
-        showToast('방에서 내보내졌어요', true);
+    kickListenerRef.current = onSnapshot(doc(db, 'rooms', code), snap => {
+      if (snap.exists()) {
+        const kicked: string[] = snap.data().kickedMembers || [];
+        if (kicked.includes(nick)) {
+          unsubscribersRef.current.forEach(u => u());
+          unsubscribersRef.current = [];
+          if (kickListenerRef.current) { kickListenerRef.current(); kickListenerRef.current = null; }
+          localStorage.removeItem('nick_' + user.uid);
+          localStorage.removeItem('couple_' + user.uid);
+          setCurrentNick('');
+          setCurrentCoupleCode('');
+          setAuthState('couple');
+          showToast('방에서 내보내졌어요', true);
+        }
       }
     });
 
@@ -189,13 +195,6 @@ export default function PageRoot() {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
           if (userDoc.exists()) {
             const data = userDoc.data();
-            if (data.kicked) {
-              localStorage.removeItem('nick_' + user.uid);
-              localStorage.removeItem('couple_' + user.uid);
-              setAuthState('couple');
-              showToast('방에서 내보내졌어요', true);
-              return;
-            }
             if (data.coupleCode && data.nickname) {
               localStorage.setItem('nick_' + user.uid, data.nickname);
               localStorage.setItem('couple_' + user.uid, data.coupleCode);
@@ -512,6 +511,7 @@ export default function PageRoot() {
 
       {/* Toast */}
       <Toast message={toast.message} isError={toast.isError} visible={toast.visible} />
+
     </>
   );
 }
