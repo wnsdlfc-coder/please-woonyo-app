@@ -142,7 +142,7 @@ textarea.form-input{resize:none;min-height:90px;line-height:1.6;}
 .cal-day-label{text-align:center;font-size:11px;font-weight:700;color:var(--text3);padding:6px 0;}
 .cal-day-label:first-child{color:#E74C3C;}
 .cal-day-label:last-child{color:#4A90D9;}
-.cal-cell{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:3px;overflow:hidden;cursor:pointer;transition:all 0.2s;padding:2px;position:relative;background:transparent;border:none;font-family:inherit;min-width:0;}
+.cal-cell{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2px;overflow:hidden;cursor:pointer;transition:all 0.2s;position:relative;background:transparent;border:none;font-family:inherit;width:100%;min-width:0;box-sizing:border-box;}
 .cal-cell:hover{background:var(--rose4);}
 .cal-cell.today{background:var(--rose4);}
 .cal-cell.today .cal-num{color:var(--rose);font-weight:800;}
@@ -150,7 +150,8 @@ textarea.form-input{resize:none;min-height:90px;line-height:1.6;}
 .cal-cell.sunday .cal-num{color:#E74C3C;}
 .cal-cell.saturday .cal-num{color:#4A90D9;}
 .cal-cell.other-month .cal-num{color:var(--text3);}
-.cal-num{font-size:16px;font-weight:700;line-height:1;}
+.cal-num{font-size:16px;font-weight:700;line-height:1;flex-shrink:0;}
+.cal-event-labels{position:absolute;left:1px;right:1px;bottom:1px;display:flex;flex-direction:column;gap:1px;overflow:hidden;}
 .cal-dots{display:flex;gap:2px;margin-top:2px;flex-wrap:wrap;justify-content:center;}
 .cal-dot{width:4px;height:4px;border-radius:50%;}
 .cal-dot-date{background:var(--rose);}

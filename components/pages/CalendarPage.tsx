@@ -260,7 +260,7 @@ export default function CalendarPage({
           {/* 이벤트 레이블 — 최대 2개 표시, 초과 시 +N 배지 */}
           {(() => {
             const labels: React.ReactNode[] = [];
-            const S = { fontSize: '9px', fontWeight: 800 as const, borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, textAlign: 'center' as const, display: 'block' };
+            const S = { fontSize: '9px', fontWeight: 800 as const, borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, textAlign: 'center' as const, display: 'block', width: '100%', boxSizing: 'border-box' as const };
             if (hasAnni) labels.push(
               <span key="a" style={{ ...S, color: '#B71C1C', background: 'rgba(255,100,130,0.28)' }}>
                 {(anniDatesMap[dateStr]?.[0]?.name || '기념일').slice(0, 6)}
@@ -288,10 +288,10 @@ export default function CalendarPage({
             );
             const overflow = labels.length - 2;
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: '1px', width: '100%', maxWidth: '100%', alignItems: 'stretch', overflow: 'hidden' }}>
+              <div className="cal-event-labels">
                 {labels.slice(0, 2)}
                 {overflow > 0 && (
-                  <span style={{ fontSize: '8px', fontWeight: 900, color: 'white', background: 'var(--rose)', borderRadius: '3px', padding: '0 3px', lineHeight: '13px', textAlign: 'center' }}>
+                  <span style={{ fontSize: '8px', fontWeight: 900, color: 'white', background: 'var(--rose)', borderRadius: '3px', padding: '0 3px', lineHeight: '13px', textAlign: 'center', display: 'block' }}>
                     +{overflow}
                   </span>
                 )}
