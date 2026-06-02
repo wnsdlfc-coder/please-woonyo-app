@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { simplifyRegionName } from '@/lib/utils';
-import { useMapComputed } from './map/useMapComputed';
+import { useMapComputed, allSVGPaths, cityMatchesPath } from './map/useMapComputed';
 import KoreaMap from './map/KoreaMap';
 import PlaceListSheet from './map/PlaceListSheet';
 import PlaceAddModal from './map/PlaceAddModal';
@@ -23,6 +23,7 @@ export default function MapPage({
   const [mapControlActive, setMapControlActive] = useState(false);
   const [selectedBuckets, setSelectedBuckets] = useState<Set<string>>(new Set());
   const [bucketMemos, setBucketMemos] = useState<Record<string, string>>({});
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     const m: Record<string, string> = {};
@@ -31,30 +32,98 @@ export default function MapPage({
   }, [allBucketlist]);
 
   const {
-    svgContent, isRegionVisited, counts,
+    svgContent, counts,
     visitedPathCount, totalPathCount, progressPct, visitedRegionCount, ddayVal,
   } = useMapComputed(allPlaces, allBucketlist, allRequests, allAnniversaries, mapControlActive);
 
-  const handleRegionVisitedClick = (rkey: string, rname: string) => {
+  // 지역 클릭 → 상세 모달 (방문 여부 무관)
+  const handleRegionClick = (rkey: string, rname: string) => {
     setRegionModalRkey(rkey);
     setRegionModalTitle(simplifyRegionName(rname) + (counts[rkey] ? ` (${counts[rkey]}회)` : ''));
     setShowRegionModal(true);
   };
 
-  const handleToggleBucket = async (rkey: string, rname: string) => {
-    const existing = allBucketlist.find(b =>
-      (b.regionName ? b.regionName === rname : b.region === rkey)
-    );
-    if (existing) {
-      await deleteDoc(doc(db, 'bucketlist', existing.id));
-      showToast('버킷리스트에서 제거했어요');
-    } else {
-      await addDoc(collection(db, 'bucketlist'), {
-        roomId: currentCoupleCode, region: rkey, regionName: rname || rkey,
-        createdBy: currentNick, createdAt: serverTimestamp(),
-      });
-      showToast('버킷리스트에 추가했어요 💗');
+  // 현재 위치 인증 — Nominatim 역지오코딩
+  const handleVerifyLocation = () => {
+    if (!navigator.geolocation) {
+      showToast('위치 서비스를 지원하지 않는 브라우저예요', true);
+      return;
     }
+    setIsVerifying(true);
+    showToast('📡 위치를 확인하는 중...');
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude: lat, longitude: lon } = pos.coords;
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=ko`,
+            { headers: { 'User-Agent': 'PleaseWoonyo/1.0 (couple-app)' } }
+          );
+          const data = await res.json();
+          const addr = data.address || {};
+
+          // 주소 후보: 구/군 → 시 → 도 순서로 매칭 시도
+          const candidates: string[] = [
+            addr.suburb, addr.quarter, addr.neighbourhood,
+            addr.county, addr.city, addr.town, addr.village,
+            addr.state,
+          ].filter(Boolean) as string[];
+
+          let matchedRkey = '';
+          let matchedRname = '';
+
+          for (const candidate of candidates) {
+            for (const { n, rk } of allSVGPaths) {
+              if (cityMatchesPath(candidate, n)) {
+                matchedRkey = rk;
+                matchedRname = n;
+                break;
+              }
+            }
+            if (matchedRname) break;
+          }
+
+          if (!matchedRname) {
+            showToast('지역을 인식할 수 없어요. 다시 시도해보세요 😥', true);
+            setIsVerifying(false);
+            return;
+          }
+
+          // 이미 인증된 지역인지 확인 (중복 방지)
+          const regionKey = `${matchedRkey} · ${matchedRname}`;
+          const alreadyVerified = allPlaces.some(
+            p => p.category === 'visited' && p.memo === '위치 인증' && p.region === regionKey
+          );
+          if (alreadyVerified) {
+            showToast(`📍 ${simplifyRegionName(matchedRname)} 은(는) 이미 인증된 지역이에요!`);
+            setIsVerifying(false);
+            return;
+          }
+
+          await addDoc(collection(db, 'places'), {
+            name: simplifyRegionName(matchedRname),
+            region: regionKey,
+            category: 'visited',
+            coupleCode: currentCoupleCode,
+            memo: '위치 인증',
+            createdAt: serverTimestamp(),
+          });
+
+          showToast(`🎉 ${simplifyRegionName(matchedRname)} 인증 완료! 지도에 색칠됐어요`);
+        } catch {
+          showToast('위치 확인 실패. 다시 시도해보세요', true);
+        } finally {
+          setIsVerifying(false);
+        }
+      },
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) showToast('위치 권한을 허용해주세요 📍', true);
+        else showToast('위치를 가져올 수 없어요', true);
+        setIsVerifying(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const handleSavePlace = async ({ name, region, category, memo }: { name: string; region: string; category: 'visited' | 'wanna'; memo: string }) => {
@@ -136,10 +205,10 @@ export default function MapPage({
         visitedPathCount={visitedPathCount}
         totalPathCount={totalPathCount}
         ddayVal={ddayVal}
-        isRegionVisited={isRegionVisited}
-        onRegionVisitedClick={handleRegionVisitedClick}
-        onBucketToggle={handleToggleBucket}
+        onRegionClick={handleRegionClick}
         onDice={handleDice}
+        onVerifyLocation={handleVerifyLocation}
+        isVerifying={isVerifying}
       />
 
       <div className="map-legend-wrap">

@@ -14,16 +14,19 @@ const { W, H, paths, meshD, jejuPaths, jejuTX, jejuTY, ulData } = PREBUILT_MAP a
 };
 
 const LABEL_MIN = 400;
-const allSVGPaths = [...(paths || []), ...(jejuPaths || [])];
+export const allSVGPaths: { d: string; rk: string; n: string; cx: number; cy: number; ba: number }[] = [
+  ...(paths || []),
+  ...(jejuPaths || []).map(p => ({ ...p, rk: '제주특별자치도' })),
+];
 
-function normCity(s: string): string {
+export function normCity(s: string): string {
   s = (s || '').trim().split(' · ')[0].split('-')[0].trim();
   const m = s.match(/^(.+?시)[가-힣]+[구동]$/);
   if (m) return m[1].replace(/시$/, '');
   return s.replace(/특별자치도$|특별자치시$|광역시$|특별시$|시$|군$|구$/, '');
 }
 
-function cityMatchesPath(dateCity: string, pathName: string): boolean {
+export function cityMatchesPath(dateCity: string, pathName: string): boolean {
   if (!dateCity || !pathName) return false;
   const dc = normCity(dateCity), np = normCity(pathName);
   if (dc === np) return true;
