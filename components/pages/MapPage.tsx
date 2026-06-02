@@ -32,15 +32,32 @@ export default function MapPage({
   }, [allBucketlist]);
 
   const {
-    svgContent, counts,
+    svgContent, isRegionVisited, counts,
     visitedPathCount, totalPathCount, progressPct, visitedRegionCount, ddayVal,
   } = useMapComputed(allPlaces, allBucketlist, allRequests, allAnniversaries, mapControlActive);
 
-  // 지역 클릭 → 상세 모달 (방문 여부 무관)
-  const handleRegionClick = (rkey: string, rname: string) => {
+  // 방문한 지역 클릭 → 상세 모달
+  const handleRegionVisitedClick = (rkey: string, rname: string) => {
     setRegionModalRkey(rkey);
     setRegionModalTitle(simplifyRegionName(rname) + (counts[rkey] ? ` (${counts[rkey]}회)` : ''));
     setShowRegionModal(true);
+  };
+
+  // 미방문 지역 클릭 → 가고싶은 곳 토글
+  const handleToggleBucket = async (rkey: string, rname: string) => {
+    const existing = allBucketlist.find(b =>
+      (b.regionName ? b.regionName === rname : b.region === rkey)
+    );
+    if (existing) {
+      await deleteDoc(doc(db, 'bucketlist', existing.id));
+      showToast('가고싶은 곳에서 제거했어요');
+    } else {
+      await addDoc(collection(db, 'bucketlist'), {
+        roomId: currentCoupleCode, region: rkey, regionName: rname || rkey,
+        createdBy: currentNick, createdAt: serverTimestamp(),
+      });
+      showToast('가고싶은 곳에 추가했어요 💙');
+    }
   };
 
   // 현재 위치 인증 — Nominatim 역지오코딩
@@ -205,7 +222,9 @@ export default function MapPage({
         visitedPathCount={visitedPathCount}
         totalPathCount={totalPathCount}
         ddayVal={ddayVal}
-        onRegionClick={handleRegionClick}
+        isRegionVisited={isRegionVisited}
+        onRegionVisitedClick={handleRegionVisitedClick}
+        onBucketToggle={handleToggleBucket}
         onDice={handleDice}
         onVerifyLocation={handleVerifyLocation}
         isVerifying={isVerifying}

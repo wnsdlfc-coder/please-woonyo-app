@@ -63,7 +63,7 @@ export default function ChatRoomView({ room, currentNick, allMessages, onSendMes
   };
 
   return (
-    <div className="page active" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 130px)' }}>
+    <div className="page active chat-room-wrap">
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
         <button

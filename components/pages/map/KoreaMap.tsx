@@ -8,7 +8,9 @@ interface KoreaMapProps {
   visitedPathCount: number;
   totalPathCount: number;
   ddayVal: string;
-  onRegionClick: (rkey: string, rname: string) => void;
+  isRegionVisited: (rname: string) => boolean;
+  onRegionVisitedClick: (rkey: string, rname: string) => void;
+  onBucketToggle: (rkey: string, rname: string) => void;
   onDice: () => void;
   onVerifyLocation: () => void;
   isVerifying: boolean;
@@ -17,15 +19,16 @@ interface KoreaMapProps {
 export default function KoreaMap({
   svgContent, mapControlActive, onToggleControl,
   visitedPathCount, totalPathCount, ddayVal,
-  onRegionClick, onDice, onVerifyLocation, isVerifying,
+  isRegionVisited, onRegionVisitedClick, onBucketToggle,
+  onDice, onVerifyLocation, isVerifying,
 }: KoreaMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLDivElement>(null);
-  const callbackRef = useRef(onRegionClick);
+  const callbacksRef = useRef({ isRegionVisited, onRegionVisitedClick, onBucketToggle });
   const zoomRef = useRef({ scale: 1, tx: 0, ty: 0 });
   const didMoveRef = useRef(false);
 
-  useEffect(() => { callbackRef.current = onRegionClick; });
+  useEffect(() => { callbacksRef.current = { isRegionVisited, onRegionVisitedClick, onBucketToggle }; });
 
   // SVG 교체 + 클릭 — 모든 지역 클릭 시 상세 모달
   useEffect(() => {
@@ -39,7 +42,12 @@ export default function KoreaMap({
       if (!region) return;
       const rk = region.getAttribute('data-rkey') || '';
       const rname = region.getAttribute('data-name') || '';
-      callbackRef.current(rk, rname);
+      const { isRegionVisited, onRegionVisitedClick, onBucketToggle } = callbacksRef.current;
+      if (isRegionVisited(rname)) {
+        onRegionVisitedClick(rk, rname);
+      } else {
+        onBucketToggle(rk, rname);
+      }
     };
     el.addEventListener('click', handleClick);
     return () => el.removeEventListener('click', handleClick);
