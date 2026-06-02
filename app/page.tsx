@@ -42,12 +42,14 @@ interface Diary {
 interface Anniversary { id: string; name: string; date: string; emoji: string; repeat: boolean; coupleCode: string; }
 interface Message {
   id: string; fromUser: string; coupleCode: string; text: string;
+  chatRoomId?: string;
   createdAt: { seconds?: number } | null;
   readAt: { seconds?: number } | null;
   selfDestruct?: boolean;
 }
 interface Schedule { id: string; title: string; date: string; endDate?: string; description?: string; createdBy?: string; roomId: string; }
 interface Bucketlist { id: string; roomId: string; region: string; regionName?: string; memo?: string; }
+interface ChatRoom { id: string; title: string; coupleCode: string; createdBy: string; createdAt: { seconds?: number } | null; }
 
 export default function PageRoot() {
   const [authState, setAuthState] = useState<AuthState>('loading');
@@ -66,6 +68,7 @@ export default function PageRoot() {
   const [allMessages, setAllMessages] = useState<Message[]>([]);
   const [allSchedules, setAllSchedules] = useState<Schedule[]>([]);
   const [allBucketlist, setAllBucketlist] = useState<Bucketlist[]>([]);
+  const [allChatRooms, setAllChatRooms] = useState<ChatRoom[]>([]);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState('');
@@ -146,7 +149,11 @@ export default function PageRoot() {
         .filter((d, i, arr) => arr.findIndex(x => (x.data().regionName || x.data().region) === (d.data().regionName || d.data().region)) === i)
         .map(d => ({ id: d.id, ...d.data() } as Bucketlist)));
     });
-    unsubscribersRef.current = [u1, u2, u3, u4, u5, u6, u7];
+    const u8 = onSnapshot(query(collection(db, 'chatRooms'), where('coupleCode', '==', code)), snap => {
+      setAllChatRooms(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatRoom))
+        .sort((a, b) => ((a.createdAt as { seconds?: number })?.seconds || 0) - ((b.createdAt as { seconds?: number })?.seconds || 0)));
+    });
+    unsubscribersRef.current = [u1, u2, u3, u4, u5, u6, u7, u8];
   }, []);
 
   const enterApp = useCallback((user: User, nick: string, code: string) => {
@@ -257,7 +264,15 @@ export default function PageRoot() {
     });
   }, [currentNick, currentCoupleCode, members]);
 
-  const unreadMsgCount = allMessages.filter(m => m.fromUser !== currentNick && !m.readAt).length;
+  const handleSendChatMessage = useCallback(async (text: string, selfDestruct: boolean, roomId: string) => {
+    const partner = members.find(m => m !== currentNick) || '';
+    await addDoc(collection(db, 'notes'), {
+      fromUser: currentNick, toUser: partner, coupleCode: currentCoupleCode,
+      text, chatRoomId: roomId, createdAt: serverTimestamp(), readAt: null, selfDestruct, chatMode: true,
+    });
+  }, [currentNick, currentCoupleCode, members]);
+
+  const unreadMsgCount = allMessages.filter(m => m.chatRoomId && m.fromUser !== currentNick && !m.readAt).length;
 
   const todayStr = new Date().toISOString().split('T')[0];
   const pastAccepted = allRequests.filter(r => (r.status === '수락' || r.status === 'accepted') && r.date <= todayStr).sort((a, b) => b.date.localeCompare(a.date));
@@ -294,7 +309,14 @@ export default function PageRoot() {
           <Apply currentNick={currentNick} currentCoupleCode={currentCoupleCode} members={members} showToast={showToast} onSubmitted={() => setActivePage('home')} />
         )}
         {activePage === 'chat' && (
-          <ChatPage currentNick={currentNick} allMessages={allMessages} onSendMessage={handleSendMessage} />
+          <ChatPage
+            currentNick={currentNick}
+            currentCoupleCode={currentCoupleCode}
+            allChatRooms={allChatRooms}
+            allMessages={allMessages}
+            onSendMessage={handleSendChatMessage}
+            showToast={showToast}
+          />
         )}
         {activePage === 'calendar' && (
           <CalendarPage currentNick={currentNick} currentCoupleCode={currentCoupleCode} allRequests={allRequests} allDiaries={allDiaries} allAnniversaries={allAnniversaries} allSchedules={allSchedules} showToast={showToast} onOpenDiary={handleOpenDiary} />
