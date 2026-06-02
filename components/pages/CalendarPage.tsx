@@ -288,7 +288,7 @@ export default function CalendarPage({
             );
             const overflow = labels.length - 2;
             return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: '1px', width: '95%', alignItems: 'stretch' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: '1px', width: '100%', maxWidth: '100%', alignItems: 'stretch', overflow: 'hidden' }}>
                 {labels.slice(0, 2)}
                 {overflow > 0 && (
                   <span style={{ fontSize: '8px', fontWeight: 900, color: 'white', background: 'var(--rose)', borderRadius: '3px', padding: '0 3px', lineHeight: '13px', textAlign: 'center' }}>
@@ -326,9 +326,21 @@ export default function CalendarPage({
         ))}
         {schsOnDay.map(s => (
           <div key={s.id} className="card" style={{ background: 'linear-gradient(135deg,#E4F0FF 0%,white 100%)', border: '1px solid rgba(147,210,255,0.3)', marginBottom: '8px' }}>
-            <div style={{ fontWeight: 700, fontSize: '15px' }}>📋 {s.title}</div>
-            {s.description && <div style={{ fontSize: '13px', color: 'var(--text2)', marginTop: '4px' }}>{s.description}</div>}
-            <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '6px' }}>{s.createdBy || ''}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '15px' }}>📋 {s.title}</div>
+                {s.description && <div style={{ fontSize: '13px', color: 'var(--text2)', marginTop: '4px' }}>{s.description}</div>}
+                {s.createdBy && s.createdBy !== 'auto' && <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '6px' }}>{s.createdBy}</div>}
+              </div>
+              <button
+                onClick={async () => {
+                  if (!window.confirm('일정을 삭제할까요?')) return;
+                  await deleteDoc(doc(db, 'schedules', s.id));
+                  showToast('일정이 삭제됐어요');
+                }}
+                style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: 'var(--text3)', padding: '2px', flexShrink: 0 }}
+              >🗑️</button>
+            </div>
           </div>
         ))}
         {reqsOnDay.map(r => {
