@@ -42,23 +42,31 @@ export default function ChatRoomList({
   const handleCreate = async () => {
     const title = newTitle.trim();
     if (!title) return;
-    await addDoc(collection(db, 'chatRooms'), {
-      title, coupleCode: currentCoupleCode, createdBy: currentNick, createdAt: serverTimestamp(),
-    });
-    setNewTitle(''); setCreateOpen(false);
-    showToast('채팅방이 만들어졌어요! 💬');
+    try {
+      await addDoc(collection(db, 'chatRooms'), {
+        title, coupleCode: currentCoupleCode, createdBy: currentNick, createdAt: serverTimestamp(),
+      });
+      setNewTitle(''); setCreateOpen(false);
+      showToast('채팅방이 만들어졌어요! 💬');
+    } catch (e) {
+      showToast('오류: Firestore 규칙을 확인해주세요 (' + (e as Error).message + ')', true);
+    }
   };
 
   const handleRename = async (id: string) => {
     const title = editTitle.trim();
     if (!title) return;
-    await updateDoc(doc(db, 'chatRooms', id), { title });
-    setEditRoomId(null);
-    showToast('이름이 바뀌었어요');
+    try {
+      await updateDoc(doc(db, 'chatRooms', id), { title });
+      setEditRoomId(null);
+      showToast('이름이 바뀌었어요');
+    } catch (e) {
+      showToast('수정 실패: ' + (e as Error).message, true);
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await deleteDoc(doc(db, 'chatRooms', id));
+    try { await deleteDoc(doc(db, 'chatRooms', id)); } catch { /* ignore */ }
     setMenuRoomId(null);
     showToast('채팅방이 삭제됐어요');
   };
