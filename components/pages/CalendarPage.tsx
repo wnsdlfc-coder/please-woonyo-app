@@ -10,6 +10,7 @@ interface Request {
   fromUser: string;
   toUser: string;
   date: string;
+  endDate?: string;
   time: string;
   theme: string;
   region: string;
@@ -86,20 +87,35 @@ export default function CalendarPage({
   const [schDesc, setSchDesc] = useState('');
 
   const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  // 타임존 안전한 날짜 문자열 변환
+  const toDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
   const today = new Date(); today.setHours(0,0,0,0);
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = toDateStr(today);  // toISOString() 대신 로컬 날짜 사용 (UTC 오프셋 버그 수정)
 
   const firstDay = new Date(calYear, calMonth, 1).getDay();
   const lastDate = new Date(calYear, calMonth + 1, 0).getDate();
 
-  const acceptedDates = new Set(allRequests.filter(r => r.status === '수락').map(r => r.date));
-  const pendingDates = new Set(allRequests.filter(r => r.status === '대기').map(r => r.date));
+  // 기간 신청 지원: date ~ endDate 범위 모두 포함
+  const acceptedDates = new Set<string>();
+  allRequests.filter(r => r.status === '수락' || r.status === 'accepted').forEach(r => {
+    const cur = new Date(r.date + 'T00:00:00');
+    const end = new Date((r.endDate || r.date) + 'T00:00:00');
+    while (cur <= end) { acceptedDates.add(toDateStr(cur)); cur.setDate(cur.getDate() + 1); }
+  });
+  const pendingDates = new Set<string>();
+  allRequests.filter(r => r.status === '대기').forEach(r => {
+    const cur = new Date(r.date + 'T00:00:00');
+    const end = new Date((r.endDate || r.date) + 'T00:00:00');
+    while (cur <= end) { pendingDates.add(toDateStr(cur)); cur.setDate(cur.getDate() + 1); }
+  });
 
   const anniDatesMap: Record<string, Anniversary[]> = {};
   allAnniversaries.forEach(a => {
-    let d = new Date(a.date);
+    let d = new Date(a.date + 'T00:00:00');  // 로컬 시간 기준 파싱 (UTC 오프셋 버그 수정)
     if (a.repeat) d.setFullYear(calYear);
-    const key = d.toISOString().split('T')[0];
+    const key = toDateStr(d);
     if (!anniDatesMap[key]) anniDatesMap[key] = [];
     anniDatesMap[key].push(a);
   });
@@ -229,27 +245,27 @@ export default function CalendarPage({
       cells.push(
         <button key={dateStr} className={cls} style={bgStyle} onClick={() => { setDetailDate(dateStr); setShowDetailModal(true); }}>
           <span className="cal-num">{d}</span>
-          <div style={{ display: 'flex', gap: '1px', marginTop: '2px', flexWrap: 'wrap', justifyContent: 'center', minHeight: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: '1px', width: '95%', alignItems: 'stretch' }}>
             {hasAnni && (
-              <span style={{ fontSize: '7px', fontWeight: 800, color: '#B71C1C', background: 'rgba(255,100,130,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>
-                {(anniDatesMap[dateStr]?.[0]?.name || '기').charAt(0)}
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#B71C1C', background: 'rgba(255,100,130,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                {(anniDatesMap[dateStr]?.[0]?.name || '기념일').slice(0, 6)}
               </span>
             )}
             {hasAccepted && (
-              <span style={{ fontSize: '7px', fontWeight: 800, color: '#1B5E20', background: 'rgba(100,210,100,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>
-                {(allRequests.find(r => r.date === dateStr && (r.status === '수락' || r.status === 'accepted'))?.region || '♥').charAt(0)}
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#1B5E20', background: 'rgba(100,210,100,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                {(allRequests.find(r => acceptedDates.has(r.date) && r.date === dateStr && (r.status === '수락' || r.status === 'accepted'))?.theme || allRequests.find(r => r.date <= dateStr && (r.endDate || r.date) >= dateStr && (r.status === '수락' || r.status === 'accepted'))?.theme || '데이트').slice(0, 5)}
               </span>
             )}
             {hasSched && (
-              <span style={{ fontSize: '7px', fontWeight: 800, color: '#0D47A1', background: 'rgba(100,160,255,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>
-                {(scheduleDatesMap[dateStr]?.[0]?.title || '일').charAt(0)}
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#0D47A1', background: 'rgba(100,160,255,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                {(scheduleDatesMap[dateStr]?.[0]?.title || '일정').slice(0, 5)}
               </span>
             )}
             {hasPending && (
-              <span style={{ fontSize: '7px', fontWeight: 800, color: '#E65100', background: 'rgba(255,200,80,0.35)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>대</span>
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#E65100', background: 'rgba(255,200,80,0.35)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', textAlign: 'center' }}>대기중</span>
             )}
             {hasNoDiary && !hasAccepted && (
-              <span style={{ fontSize: '7px', fontWeight: 800, color: '#BF360C', background: 'rgba(255,120,80,0.22)', borderRadius: '2px', padding: '0 2px', lineHeight: '11px' }}>📔</span>
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#BF360C', background: 'rgba(255,120,80,0.22)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', textAlign: 'center' }}>📔</span>
             )}
           </div>
         </button>

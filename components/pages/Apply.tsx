@@ -15,6 +15,8 @@ const THEMES = ['맛집탐방', '카페', '드라이브', '액티비티', '힐�
 
 export default function Apply({ currentNick, currentCoupleCode, members, showToast, onSubmitted }: ApplyProps) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState('');
+  const [multiDay, setMultiDay] = useState(false);
   const [time, setTime] = useState('14:00');
   const [selTheme, setSelTheme] = useState('');
   const [location, setLocation] = useState('');
@@ -29,10 +31,13 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
     if (!location.trim()) { showToast('장소를 입력해주세요', true); return; }
     if (!partner) { showToast('상대방이 아직 방에 없어요', true); return; }
 
+    if (multiDay && endDate && endDate < date) { showToast('종료일이 시작일보다 앞서요', true); return; }
+
     await addDoc(collection(db, 'requests'), {
       fromUser: currentNick,
       toUser: partner,
       date, time,
+      endDate: multiDay && endDate ? endDate : null,
       theme: selTheme,
       region: location.trim(),
       subLocation: '',
@@ -44,7 +49,7 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
     });
 
     showToast('데이트 신청 완료 💕');
-    setSelTheme(''); setLocation(''); setMessage('');
+    setSelTheme(''); setLocation(''); setMessage(''); setEndDate(''); setMultiDay(false);
     onSubmitted();
   };
 
@@ -81,6 +86,35 @@ export default function Apply({ currentNick, currentCoupleCode, members, showToa
               onChange={e => setTime(e.target.value)}
               style={{ flex: '1 1 100px', minWidth: 0, fontSize: '15px' }}
             />
+          </div>
+        </div>
+
+        {/* 기간 설정 */}
+        <div className="form-group" style={{ marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={() => { setMultiDay(v => !v); if (multiDay) setEndDate(''); }}
+              style={{
+                padding: '5px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+                border: '1.5px solid ' + (multiDay ? 'var(--rose)' : 'var(--border)'),
+                background: multiDay ? 'var(--rose4)' : 'transparent',
+                color: multiDay ? 'var(--rose)' : 'var(--text3)',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >🗓️ 기간 설정 {multiDay ? 'ON' : ''}</button>
+            {multiDay && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
+                <span style={{ fontSize: '12px', color: 'var(--text3)', whiteSpace: 'nowrap' }}>~ 종료일</span>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={endDate}
+                  min={date}
+                  onChange={e => setEndDate(e.target.value)}
+                  style={{ flex: 1, minWidth: 0, fontSize: '14px' }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
