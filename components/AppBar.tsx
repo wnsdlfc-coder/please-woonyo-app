@@ -25,13 +25,21 @@ export default function AppBar({ currentNick, onLogout, roomTitle }: AppBarProps
   return (
     <div className="top-nav">
       <div className="app-logo">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--rose)">
-          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-        </svg>
+        {/* 로고 이미지: public/logo.png 저장 시 자동 표시 */}
+        <img
+          src="/logo.png"
+          alt="플리즈 우뇨"
+          width={32}
+          height={32}
+          style={{ objectFit: 'contain', borderRadius: '4px' }}
+          onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+        />
         <div>
-          <div className="app-title" style={{ fontSize: '16px', lineHeight: 1.1 }}>Please Woonyo</div>
+          <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--rose)', letterSpacing: '-0.3px', lineHeight: 1.1, fontFamily: 'inherit' }}>
+            플리즈 우뇨
+          </div>
           {roomTitle && (
-            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--rose)', letterSpacing: '0.3px', lineHeight: 1.2 }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.2px', lineHeight: 1.3 }}>
               {roomTitle}
             </div>
           )}
