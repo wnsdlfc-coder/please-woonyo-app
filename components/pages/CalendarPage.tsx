@@ -245,29 +245,47 @@ export default function CalendarPage({
       cells.push(
         <button key={dateStr} className={cls} style={bgStyle} onClick={() => { setDetailDate(dateStr); setShowDetailModal(true); }}>
           <span className="cal-num">{d}</span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: '1px', width: '95%', alignItems: 'stretch' }}>
-            {hasAnni && (
-              <span style={{ fontSize: '9px', fontWeight: 800, color: '#B71C1C', background: 'rgba(255,100,130,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+          {/* 이벤트 레이블 — 최대 2개 표시, 초과 시 +N 배지 */}
+          {(() => {
+            const labels: React.ReactNode[] = [];
+            const S = { fontSize: '9px', fontWeight: 800 as const, borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, textAlign: 'center' as const, display: 'block' };
+            if (hasAnni) labels.push(
+              <span key="a" style={{ ...S, color: '#B71C1C', background: 'rgba(255,100,130,0.28)' }}>
                 {(anniDatesMap[dateStr]?.[0]?.name || '기념일').slice(0, 6)}
               </span>
-            )}
-            {hasAccepted && (
-              <span style={{ fontSize: '9px', fontWeight: 800, color: '#1B5E20', background: 'rgba(100,210,100,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                {(allRequests.find(r => acceptedDates.has(r.date) && r.date === dateStr && (r.status === '수락' || r.status === 'accepted'))?.theme || allRequests.find(r => r.date <= dateStr && (r.endDate || r.date) >= dateStr && (r.status === '수락' || r.status === 'accepted'))?.theme || '데이트').slice(0, 5)}
+            );
+            if (hasAccepted) {
+              const req = allRequests.find(r => r.date === dateStr && (r.status === '수락' || r.status === 'accepted'))
+                       ?? allRequests.find(r => r.date <= dateStr && (r.endDate || r.date) >= dateStr && (r.status === '수락' || r.status === 'accepted'));
+              labels.push(
+                <span key="d" style={{ ...S, color: '#1B5E20', background: 'rgba(100,210,100,0.28)' }}>
+                  {(req?.region || '데이트').slice(0, 6)}
+                </span>
+              );
+            }
+            if (hasSched) labels.push(
+              <span key="s" style={{ ...S, color: '#0D47A1', background: 'rgba(100,160,255,0.28)' }}>
+                {(scheduleDatesMap[dateStr]?.[0]?.title || '일정').slice(0, 6)}
               </span>
-            )}
-            {hasSched && (
-              <span style={{ fontSize: '9px', fontWeight: 800, color: '#0D47A1', background: 'rgba(100,160,255,0.28)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                {(scheduleDatesMap[dateStr]?.[0]?.title || '일정').slice(0, 5)}
-              </span>
-            )}
-            {hasPending && (
-              <span style={{ fontSize: '9px', fontWeight: 800, color: '#E65100', background: 'rgba(255,200,80,0.35)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', textAlign: 'center' }}>대기중</span>
-            )}
-            {hasNoDiary && !hasAccepted && (
-              <span style={{ fontSize: '9px', fontWeight: 800, color: '#BF360C', background: 'rgba(255,120,80,0.22)', borderRadius: '2px', padding: '0 2px', lineHeight: '13px', textAlign: 'center' }}>📔</span>
-            )}
-          </div>
+            );
+            if (hasPending) labels.push(
+              <span key="p" style={{ ...S, color: '#E65100', background: 'rgba(255,200,80,0.35)' }}>대기중</span>
+            );
+            if (hasNoDiary && !hasAccepted) labels.push(
+              <span key="nd" style={{ ...S, color: '#BF360C', background: 'rgba(255,120,80,0.22)' }}>📔</span>
+            );
+            const overflow = labels.length - 2;
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', marginTop: '1px', width: '95%', alignItems: 'stretch' }}>
+                {labels.slice(0, 2)}
+                {overflow > 0 && (
+                  <span style={{ fontSize: '8px', fontWeight: 900, color: 'white', background: 'var(--rose)', borderRadius: '3px', padding: '0 3px', lineHeight: '13px', textAlign: 'center' }}>
+                    +{overflow}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </button>
       );
     }
@@ -279,8 +297,12 @@ export default function CalendarPage({
     const [y, m, d] = detailDate.split('-');
     const annisOnDay = anniDatesMap[detailDate] || [];
     const schsOnDay = scheduleDatesMap[detailDate] || [];
-    const reqsOnDay = allRequests.filter(r => r.date === detailDate && r.status === '수락');
-    const pendingOnDay = allRequests.filter(r => r.date === detailDate && r.status === '대기');
+    // 단일 날짜 + 기간 신청(date ~ endDate) 모두 포함
+    const reqsOnDay = allRequests.filter(r =>
+      (r.status === '수락' || r.status === 'accepted') &&
+      r.date <= detailDate && (r.endDate || r.date) >= detailDate
+    );
+    const pendingOnDay = allRequests.filter(r => r.status === '대기' && r.date === detailDate);
 
     return (
       <>
@@ -301,8 +323,8 @@ export default function CalendarPage({
           const diary = allDiaries.find(x => x.reqId === r.id);
           return (
             <div key={r.id} className="card" style={{ background: 'linear-gradient(135deg,#E4FFE4 0%,white 100%)', border: '1px solid rgba(150,230,150,0.3)', marginBottom: '8px' }}>
-              <div style={{ fontWeight: 700, fontSize: '15px' }}>{r.time} · {r.theme}</div>
-              <div style={{ fontSize: '13px', color: 'var(--text2)', marginTop: '4px' }}>{r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
+              <div style={{ fontWeight: 700, fontSize: '15px' }}>{r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
+              <div style={{ fontSize: '13px', color: 'var(--text2)', marginTop: '4px' }}>{r.time} · {r.theme}{r.endDate ? ` · ~${r.endDate}` : ''}</div>
               {diary ? (
                 <div style={{ marginTop: '10px', padding: '12px', background: 'var(--rose4)', borderRadius: '10px' }}>
                   <div style={{ fontWeight: 800, fontSize: '14px', marginBottom: '4px' }}>📔 {diary.title}</div>
