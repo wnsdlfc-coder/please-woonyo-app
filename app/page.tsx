@@ -5,7 +5,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
   collection, doc, setDoc, getDoc, getDocs,
-  onSnapshot, query, where, serverTimestamp, updateDoc, addDoc, deleteDoc
+  onSnapshot, query, where, serverTimestamp, updateDoc, addDoc, deleteDoc, increment
 } from 'firebase/firestore';
 import { arrayUnion } from 'firebase/firestore';
 
@@ -166,6 +166,12 @@ export default function PageRoot() {
         }
       }
     });
+    // 방문 횟수 기록 (이번 달)
+    const monthKey = new Date().toISOString().slice(0, 7);
+    updateDoc(doc(db, 'rooms', code), {
+      [`visits.${nick}.${monthKey}`]: increment(1),
+    }).catch(() => {});
+
     loadAll(code); loadRoomMembers(code);
   }, [loadAll, loadRoomMembers, showToast]);
 

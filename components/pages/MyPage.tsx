@@ -75,6 +75,8 @@ export default function MyPage({
   const [contentModalOpen, setContentModalOpen] = useState(false);
   // 커플코드 표시 여부
   const [codeVisible, setCodeVisible] = useState(false);
+  // 방문 통계
+  const [visitsData, setVisitsData] = useState<Record<string, Record<string, number>>>({});
 
   // 다른 방 입장
   const [showJoinOtherModal, setShowJoinOtherModal] = useState(false);
@@ -106,6 +108,7 @@ export default function MyPage({
     const roomData = roomDoc.exists() ? roomDoc.data() : {};
     setRoomTitle(roomData.title || '우리의 방');
     setRoomTitleInput(roomData.title || '우리의 방');
+    setVisitsData(roomData.visits || {});
     const kickedMembers: string[] = roomData.kickedMembers || [];
     const membersSnap = await getDocs(query(collection(db, 'users'), where('coupleCode', '==', currentCoupleCode)));
     const seen = new Set<string>();
@@ -354,28 +357,114 @@ export default function MyPage({
 
     // ── 통계 ──
     if (myTab === 'stats') {
+      const partner = members.find(m => m.nick !== currentNick)?.nick || '상대방';
+      const now = new Date();
+      const currentMonth = now.toISOString().slice(0, 7);
+      const monthLabel = `${now.getFullYear()}년 ${now.getMonth() + 1}월`;
+
+      // 이번 달 대결 데이터
+      const myReqs = allRequests.filter(r => r.fromUser === currentNick && r.date.startsWith(currentMonth)).length;
+      const ptReqs = allRequests.filter(r => r.fromUser === partner && r.date.startsWith(currentMonth)).length;
+      const myDiar = allDiaries.filter(d => d.author === currentNick && d.date.startsWith(currentMonth)).length;
+      const ptDiar = allDiaries.filter(d => d.author === partner && d.date.startsWith(currentMonth)).length;
+      const toMon = (sec?: number) => sec ? new Date(sec * 1000).toISOString().slice(0, 7) : '';
+      const myMsgs = allMessages.filter(m => m.fromUser === currentNick && toMon((m.createdAt as { seconds?: number })?.seconds) === currentMonth).length;
+      const ptMsgs = allMessages.filter(m => m.fromUser === partner && toMon((m.createdAt as { seconds?: number })?.seconds) === currentMonth).length;
+      const myVisit = (visitsData[currentNick] || {})[currentMonth] || 0;
+      const ptVisit = (visitsData[partner] || {})[currentMonth] || 0;
+      const myTotal = myReqs + myDiar + myMsgs + myVisit;
+      const ptTotal = ptReqs + ptDiar + ptMsgs + ptVisit;
+      const winner = myTotal > ptTotal ? currentNick : myTotal < ptTotal ? partner : null;
+
+      // 가로 비율 바 컴포넌트
+      const StatBar = ({ label, myVal, ptVal }: { label: string; myVal: number; ptVal: number }) => {
+        const total = myVal + ptVal;
+        if (total === 0) return (
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.3px', marginBottom: '6px' }}>{label}</div>
+            <div style={{ height: '38px', background: '#F0F0F0', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text3)' }}>아직 없어요</span>
+            </div>
+          </div>
+        );
+        const myPct = Math.round((myVal / total) * 100);
+        const ptPct = 100 - myPct;
+        return (
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.3px', marginBottom: '7px' }}>{label}</div>
+            <div style={{ display: 'flex', height: '38px', borderRadius: '20px', overflow: 'hidden' }}>
+              <div style={{ flex: myPct || 0.5, background: '#5B9BD5', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '4px' }}>
+                {myPct >= 18 && <span style={{ color: 'white', fontSize: '11px', fontWeight: 800, padding: '0 6px' }}>{myVal}회</span>}
+              </div>
+              <div style={{ flex: ptPct || 0.5, background: 'var(--rose)', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: '4px' }}>
+                {ptPct >= 18 && <span style={{ color: 'white', fontSize: '11px', fontWeight: 800, padding: '0 6px' }}>{ptVal}회</span>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px', fontSize: '11px' }}>
+              <span style={{ color: '#5B9BD5', fontWeight: 700 }}>{currentNick} {myPct}%</span>
+              <span style={{ color: 'var(--rose)', fontWeight: 700 }}>{partner} {ptPct}%</span>
+            </div>
+          </div>
+        );
+      };
+
+      // 전체 통계
       const totalDates = allRequests.filter(r => r.status === '수락').length;
-      const themeCounts = allRequests.filter(r => r.status === '수락').reduce((acc, r) => {
-        if (r.theme) acc[r.theme] = (acc[r.theme] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const avgStar = allDiaries.length > 0 ? (allDiaries.reduce((s, d) => s + (d.star || 5), 0) / allDiaries.length).toFixed(1) : null;
+      const themeCounts = allRequests.filter(r => r.status === '수락').reduce((acc, r) => { if (r.theme) acc[r.theme] = (acc[r.theme] || 0) + 1; return acc; }, {} as Record<string, number>);
       const topThemes = Object.entries(themeCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-      const regionCounts = allRequests.filter(r => r.status === '수락' && r.region).reduce((acc, r) => {
-        const region = r.region.split(' · ')[0];
-        acc[region] = (acc[region] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>);
+      const regionCounts = allRequests.filter(r => r.status === '수락' && r.region).reduce((acc, r) => { const reg = r.region.split(' · ')[0]; acc[reg] = (acc[reg] || 0) + 1; return acc; }, {} as Record<string, number>);
       const topRegions = Object.entries(regionCounts).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-      const avgStar = allDiaries.length > 0
-        ? (allDiaries.reduce((sum, d) => sum + (d.star || 5), 0) / allDiaries.length).toFixed(1)
-        : null;
-
       const medals = ['🥇', '🥈', '🥉'];
 
       return (
         <div>
+          {/* ── 이번 달 대결 ── */}
+          <div className="card" style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '4px' }}>{monthLabel} 대결</div>
+            <div style={{ fontSize: '17px', fontWeight: 900, color: 'var(--text)', marginBottom: '6px' }}>
+              {roomTitle}의 이번 달 대장님은? 👑
+            </div>
+            {/* 범례 */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#5B9BD5', flexShrink: 0 }} />
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text2)' }}>{currentNick}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--rose)', flexShrink: 0 }} />
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text2)' }}>{partner}</span>
+              </div>
+            </div>
+
+            <StatBar label="데이트 신청" myVal={myReqs} ptVal={ptReqs} />
+            <StatBar label="일기 작성" myVal={myDiar} ptVal={ptDiar} />
+            <StatBar label="채팅 전송" myVal={myMsgs} ptVal={ptMsgs} />
+            <StatBar label="앱 방문" myVal={myVisit} ptVal={ptVisit} />
+
+            {/* 승자 발표 */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', textAlign: 'center' }}>
+              {winner ? (
+                <>
+                  <div style={{ fontSize: '30px', marginBottom: '6px' }}>👑</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: winner === currentNick ? '#5B9BD5' : 'var(--rose)' }}>{winner}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text3)', marginTop: '3px' }}>
+                    {monthLabel} 1등 · {winner === currentNick ? myTotal : ptTotal}점
+                  </div>
+                </>
+              ) : (myTotal + ptTotal > 0) ? (
+                <>
+                  <div style={{ fontSize: '28px', marginBottom: '6px' }}>🤝</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text2)' }}>이번 달은 동점!</div>
+                </>
+              ) : (
+                <div style={{ fontSize: '13px', color: 'var(--text3)' }}>이번 달 기록이 없어요</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── 전체 통계 ── */}
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '10px' }}>전체 기록</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
             {[
               { val: totalDates, label: '함께한 데이트' },
@@ -383,16 +472,16 @@ export default function MyPage({
               { val: avgStar ? `★${avgStar}` : '-', label: '평균 별점' },
               { val: allPlaces.filter(p => p.category === 'visited').length, label: '방문한 장소' },
             ].map(({ val, label }) => (
-              <div key={label} className="card" style={{ textAlign: 'center', padding: '20px 12px' }}>
-                <div style={{ fontSize: '32px', fontWeight: 900, color: 'var(--rose)', lineHeight: 1 }}>{val}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '6px' }}>{label}</div>
+              <div key={label} className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
+                <div style={{ fontSize: '26px', fontWeight: 900, color: 'var(--rose)', lineHeight: 1 }}>{val}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text3)', marginTop: '5px' }}>{label}</div>
               </div>
             ))}
           </div>
 
           {topThemes.length > 0 && (
             <div className="card" style={{ marginBottom: '10px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '14px' }}>🎯 즐겨하는 데이트</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '14px' }}>즐겨하는 데이트</div>
               {topThemes.map(([theme, count], i) => (
                 <div key={theme} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: i < topThemes.length - 1 ? '10px' : 0 }}>
                   <span style={{ fontSize: '18px' }}>{medals[i]}</span>
@@ -405,7 +494,7 @@ export default function MyPage({
 
           {topRegions.length > 0 && (
             <div className="card">
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '14px' }}>📍 자주 간 지역</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '14px' }}>자주 간 지역</div>
               {topRegions.map(([region, count], i) => (
                 <div key={region} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: i < topRegions.length - 1 ? '10px' : 0 }}>
                   <span style={{ fontSize: '18px' }}>{medals[i]}</span>
