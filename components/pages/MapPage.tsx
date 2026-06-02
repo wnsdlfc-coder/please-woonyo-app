@@ -73,6 +73,7 @@ export default function MapPage({
   allRequests, allAnniversaries, allDiaries, showToast, showConfirm
 }: MapPageProps) {
   const [placeTab, setPlaceTab] = useState<PlaceTab>('visited');
+  const [placeListOpen, setPlaceListOpen] = useState(false);
   const [showPlaceModal, setShowPlaceModal] = useState(false);
   const [showRegionModal, setShowRegionModal] = useState(false);
   const [regionModalTitle, setRegionModalTitle] = useState('');
@@ -449,14 +450,57 @@ export default function MapPage({
         <div className="map-legend-item"><div className="map-legend-dot" style={{ background: '#87CEEB', border: '1px solid #64B5E8' }} />가고싶은</div>
       </div>
 
-      {/* 탭 */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', overflowX: 'auto', borderBottom: '1px solid var(--border)', paddingBottom: 0 }}>
-        <button className={'tab-btn' + (placeTab === 'visited' ? ' active' : '')} onClick={() => setPlaceTab('visited')}>다녀온 곳</button>
-        <button className={'tab-btn' + (placeTab === 'wanna' ? ' active' : '')} onClick={() => setPlaceTab('wanna')}>가고싶은 곳</button>
-        <button className={'tab-btn' + (placeTab === 'stats' ? ' active' : '')} onClick={() => setPlaceTab('stats')}>통계</button>
+      {/* 탭 버튼 — 클릭 시 바텀시트 */}
+      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+        {([['visited', '다녀온 곳'], ['wanna', '가고싶은 곳'], ['stats', '통계']] as [PlaceTab, string][]).map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => { setPlaceTab(tab); setPlaceListOpen(true); }}
+            style={{
+              flex: 1, padding: '10px 6px', borderRadius: '10px',
+              border: '1.5px solid var(--border)', background: '#FFFDF9',
+              fontSize: '12px', fontWeight: 700, color: 'var(--text2)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      {/* 탭 컨텐츠 */}
+      {/* 탭 컨텐츠 — 바텀시트 모달 */}
+      {placeListOpen && (
+        <>
+          <div
+            onClick={() => setPlaceListOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 200 }}
+          />
+          <div style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201,
+            background: '#FFFDF9', borderRadius: '20px 20px 0 0',
+            padding: '0 16px 80px', maxHeight: '70vh', overflowY: 'auto',
+            boxShadow: '0 -4px 24px rgba(0,0,0,0.15)',
+          }}>
+            {/* 핸들 + 헤더 */}
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)' }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {([['visited', '다녀온 곳'], ['wanna', '가고싶은 곳'], ['stats', '통계']] as [PlaceTab, string][]).map(([tab, label]) => (
+                  <button key={tab} onClick={() => setPlaceTab(tab)} style={{
+                    padding: '5px 12px', borderRadius: '20px', border: 'none',
+                    background: placeTab === tab ? 'var(--rose)' : 'var(--border)',
+                    color: placeTab === tab ? 'white' : 'var(--text2)',
+                    fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  }}>{label}</button>
+                ))}
+              </div>
+              <button onClick={() => setPlaceListOpen(false)} style={{
+                background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text3)', lineHeight: 1,
+              }}>×</button>
+            </div>
+
       {placeTab === 'visited' && (
         <div>
           {allPlaces.filter(p => p.category === 'visited').map(p => (
@@ -572,6 +616,10 @@ export default function MapPage({
       )}
 
       {placeTab === 'stats' && renderStats()}
+
+          </div>{/* end 바텀시트 inner */}
+        </>
+      )}{/* end placeListOpen */}
 
       {/* 장소 추가 모달 */}
       <div className={'modal-bg' + (showPlaceModal ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) setShowPlaceModal(false); }}>
