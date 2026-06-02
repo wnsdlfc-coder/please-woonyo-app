@@ -149,8 +149,8 @@ export function useMapComputed(
       ulleungSvg = `<g transform="translate(${Math.round(W * 0.78)},180)" class="map-region" data-rkey="${ulData.rk}" data-name="${ulData.n}"><path d="${ulData.d}" fill="${pathFill(ulData.rk, ulData.n)}" stroke="#000000" stroke-width="0.5"/><title>${simplifyRegionName(ulData.n)}</title></g>`;
     }
     const shadowFilter = `<filter id="mapShadow" x="-8%" y="-8%" width="116%" height="116%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="rgba(80,120,180,0.25)"/></filter>`;
-    // 상단 바다 여백 제거: y=75부터 표시 (H=721 → 가시 높이 646)
-    const cropTop = 75;
+    // 상단 바다 여백 제거: y=130부터 표시 (H=721 → 가시 높이 591)
+    const cropTop = 130;
     const vH = H - cropTop;
     return `<svg id="map-svg" viewBox="-25 ${cropTop} ${W + 25} ${vH}" xmlns="http://www.w3.org/2000/svg" width="100%" style="display:block;user-select:none;-webkit-user-select:none;" class="map-anim"><defs>${shadowFilter}</defs><rect x="-25" y="${cropTop}" width="${W + 50}" height="${vH + 10}" fill="#EBF5FB"/><g id="map-g" filter="url(#mapShadow)">${pathsSvg}${labelsSvg}${jejuSvg}${ulleungSvg}</g></svg>`;
   }, [dateMatchedNameCounts, placeMatchedNames, allBucketlist]);
