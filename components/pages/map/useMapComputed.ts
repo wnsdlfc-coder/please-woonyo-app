@@ -140,7 +140,7 @@ export function useMapComputed(
         jg += `<path d="${d}" fill="${pathFill('제주특별자치도', n)}" stroke="#000000" stroke-width="0.35" class="map-region" data-rkey="제주특별자치도" data-name="${n}"><title>${simplifyRegionName(n)}</title></path>`;
         if (ba >= LABEL_MIN) jg += lbl(cx, cy, n);
       });
-      jejuSvg = `<g transform="translate(${jejuTX},${(jejuTY || 0) + 20})">${jg}</g>`;
+      jejuSvg = `<g transform="translate(${jejuTX},${(jejuTY || 0) - 20})">${jg}</g>`;
     }
     let ulleungSvg = '';
     if (ulleung) {
