@@ -266,6 +266,9 @@ export default function MyPage({
   };
   const handleDeleteAccepted = (id: string) => {
     showConfirm('데이트 기록을 삭제할까요?\n연결된 일기는 남아 있어요.', async () => {
+      // 수락 시 자동 생성된 일정(fromRequest)도 함께 삭제
+      const schSnap = await getDocs(query(collection(db, 'schedules'), where('fromRequest', '==', id)));
+      await Promise.all(schSnap.docs.map(d => deleteDoc(doc(db, 'schedules', d.id))));
       await deleteDoc(doc(db, 'requests', id));
       showToast('삭제됐어요');
     });
