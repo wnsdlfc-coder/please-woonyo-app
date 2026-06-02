@@ -41,8 +41,9 @@ interface Diary {
 }
 interface Anniversary { id: string; name: string; date: string; emoji: string; repeat: boolean; coupleCode: string; }
 interface Message {
-  id: string; fromUser: string; coupleCode: string; text: string;
+  id: string; fromUser: string; toUser?: string; coupleCode: string; text: string;
   chatRoomId?: string;
+  isLetter?: boolean;
   createdAt: { seconds?: number } | null;
   readAt: { seconds?: number } | null;
   selfDestruct?: boolean;

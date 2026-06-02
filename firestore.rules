@@ -1,0 +1,148 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ───────────────────────────────────────────
+    // Helper Functions
+    // ───────────────────────────────────────────
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isMember(roomId) {
+      return isAuth() && (
+        request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.get('members', []) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coupleCode', '') == roomId
+      );
+    }
+
+    function isOwner(roomId) {
+      return isAuth() &&
+        get(/databases/$(database)/documents/rooms/$(roomId)).data.get('ownerId', '') == request.auth.uid;
+    }
+
+    // ───────────────────────────────────────────
+    // users 컬렉션
+    // ───────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuth();
+      allow write: if isAuth() && (
+        request.auth.uid == userId ||
+        request.resource.data.get('uid', '') == request.auth.uid
+      );
+    }
+
+    // ───────────────────────────────────────────
+    // rooms 컬렉션
+    // ───────────────────────────────────────────
+    match /rooms/{roomId} {
+      allow read: if isMember(roomId);
+      allow create: if isAuth() &&
+        request.auth.uid in request.resource.data.members &&
+        request.resource.data.ownerId == request.auth.uid;
+      allow update: if (
+        isMember(roomId) && (
+          resource.data.get('ownerId', '') == request.auth.uid ||
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'members'])
+        )
+      ) || (
+        isAuth() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('coupleCode', '') == roomId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
+        request.auth.uid in request.resource.data.members &&
+        request.resource.data.members.hasAll(resource.data.get('members', []))
+      );
+      allow delete: if isOwner(roomId);
+    }
+
+    // ───────────────────────────────────────────
+    // diaries 컬렉션
+    // ───────────────────────────────────────────
+    match /diaries/{docId} {
+      allow read, update, delete: if isMember(resource.data.coupleCode);
+      allow create: if isMember(request.resource.data.coupleCode);
+    }
+
+    // ───────────────────────────────────────────
+    // anniversaries 컬렉션
+    // ───────────────────────────────────────────
+    match /anniversaries/{docId} {
+      allow read, update, delete: if isMember(resource.data.coupleCode);
+      allow create: if isMember(request.resource.data.coupleCode);
+    }
+
+    // ───────────────────────────────────────────
+    // notes 컬렉션
+    // ───────────────────────────────────────────
+    match /notes/{docId} {
+      allow read, update, delete: if isMember(resource.data.coupleCode);
+      allow create: if isMember(request.resource.data.coupleCode);
+    }
+
+    // ───────────────────────────────────────────
+    // places 컬렉션
+    // ───────────────────────────────────────────
+    match /places/{docId} {
+      allow read, update, delete: if isMember(resource.data.coupleCode);
+      allow create: if isMember(request.resource.data.coupleCode);
+    }
+
+    // ───────────────────────────────────────────
+    // requests 컬렉션
+    // ───────────────────────────────────────────
+    match /requests/{docId} {
+      allow read, update, delete: if isMember(resource.data.coupleCode);
+      allow create: if isMember(request.resource.data.coupleCode);
+    }
+
+    // ───────────────────────────────────────────
+    // schedules 컬렉션
+    // ───────────────────────────────────────────
+    match /schedules/{docId} {
+      allow read, update, delete: if isMember(resource.data.roomId);
+      allow create: if isMember(request.resource.data.roomId);
+    }
+
+    // ───────────────────────────────────────────
+    // bucketlist 컬렉션
+    // ───────────────────────────────────────────
+    match /bucketlist/{docId} {
+      allow read, update, delete: if isMember(resource.data.roomId);
+      allow create: if isMember(request.resource.data.roomId);
+    }
+
+    // ───────────────────────────────────────────
+    // chatRooms 컬렉션 (coupleCode 필드 사용) ← 신규 추가
+    // ───────────────────────────────────────────
+    match /chatRooms/{docId} {
+      allow read, update, delete: if isMember(resource.data.coupleCode);
+      allow create: if isMember(request.resource.data.coupleCode);
+    }
+
+    // ───────────────────────────────────────────
+    // dates 컬렉션
+    // ───────────────────────────────────────────
+    match /dates/{docId} {
+      allow read, update, delete: if isMember(resource.data.roomId);
+      allow create: if isMember(request.resource.data.roomId);
+    }
+
+    // ───────────────────────────────────────────
+    // messages 컬렉션
+    // ───────────────────────────────────────────
+    match /messages/{docId} {
+      allow read, update, delete: if isMember(resource.data.roomId);
+      allow create: if isMember(request.resource.data.roomId);
+    }
+
+    // ───────────────────────────────────────────
+    // notifications 컬렉션
+    // ───────────────────────────────────────────
+    match /notifications/{docId} {
+      allow read, update, delete: if isMember(resource.data.roomId);
+      allow create: if isMember(request.resource.data.roomId);
+    }
+
+  }
+}

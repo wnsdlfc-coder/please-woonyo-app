@@ -22,7 +22,8 @@ interface Diary {
   comments?: { author: string; text: string; createdAt: string }[];
 }
 interface Message {
-  id: string; fromUser: string; text: string;
+  id: string; fromUser: string; toUser?: string; text: string;
+  isLetter?: boolean; chatRoomId?: string;
   createdAt: { seconds?: number } | null;
   readAt: { seconds?: number } | null;
   selfDestruct?: boolean;
@@ -46,7 +47,7 @@ interface MyPageProps {
   onSendMessage: (text: string, selfDestruct: boolean) => void;
 }
 
-type MyTab = 'received' | 'sent' | 'dates' | 'diaries' | 'stats';
+type MyTab = 'received' | 'sent' | 'dates' | 'diaries' | 'stats' | 'letters';
 type FilterType = '전체' | '대기' | '수락' | '반려';
 
 const THEME_EMOJI: Record<string, string> = {
@@ -92,6 +93,25 @@ export default function MyPage({
   const [newRoomCode, setNewRoomCode] = useState('');
   const [newRoomNick, setNewRoomNick] = useState(currentNick);
 
+  // 쪽지
+  const [letterSubTab, setLetterSubTab] = useState<'received' | 'sent'>('received');
+  const [letterWriteOpen, setLetterWriteOpen] = useState(false);
+  const [letterInput, setLetterInput] = useState('');
+
+  const handleSendLetter = async () => {
+    const text = letterInput.trim();
+    if (!text) return;
+    const partner = members.find(m => m.nick !== currentNick)?.nick || '';
+    try {
+      await addDoc(collection(db, 'notes'), {
+        fromUser: currentNick, toUser: partner, coupleCode: currentCoupleCode,
+        text, isLetter: true, createdAt: serverTimestamp(), readAt: null,
+      });
+      setLetterInput(''); setLetterWriteOpen(false);
+      showToast('쪽지를 보냈어요 💌');
+    } catch { showToast('전송 실패', true); }
+  };
+
   useEffect(() => {
     const tab = (activeMyTab as MyTab) || 'received';
     setMyTab(tab);
@@ -101,6 +121,15 @@ export default function MyPage({
     }
   }, [activeMyTab]);
   useEffect(() => { loadRoomInfo(); }, [currentCoupleCode, currentNick]); // eslint-disable-line
+
+  // 쪽지함 열면 받은 쪽지 읽음 처리
+  useEffect(() => {
+    if (myTab === 'letters' && contentModalOpen) {
+      allMessages.filter(m => m.isLetter && m.fromUser !== currentNick && !m.readAt).forEach(m => {
+        updateDoc(doc(db, 'notes', m.id), { readAt: serverTimestamp() }).catch(() => {});
+      });
+    }
+  }, [myTab, contentModalOpen]); // eslint-disable-line
 
 
   const loadRoomInfo = async () => {
@@ -353,6 +382,40 @@ export default function MyPage({
     // ── 일기 ──
     if (myTab === 'diaries') {
       return allDiaries.length ? allDiaries.map(d => renderDiaryCard(d)) : <div className="empty-state">아직 일기가 없어요 📔</div>;
+    }
+
+    // ── 쪽지 ──
+    if (myTab === 'letters') {
+      const letters = allMessages.filter(m => m.isLetter)
+        .sort((a, b) => ((b.createdAt as { seconds?: number })?.seconds || 0) - ((a.createdAt as { seconds?: number })?.seconds || 0));
+      const list = letterSubTab === 'received'
+        ? letters.filter(m => m.fromUser !== currentNick)
+        : letters.filter(m => m.fromUser === currentNick);
+      return (
+        <div>
+          <button className="btn btn-rose btn-sm btn-full" style={{ marginBottom: '14px' }} onClick={() => setLetterWriteOpen(true)}>✉️ 쪽지 쓰기</button>
+          {list.length === 0
+            ? <div className="empty-state">{letterSubTab === 'received' ? '받은 쪽지가 없어요' : '보낸 쪽지가 없어요'}</div>
+            : list.map(m => {
+                const secs = (m.createdAt as { seconds?: number })?.seconds;
+                const dateStr = secs ? new Date(secs * 1000).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                const isUnread = letterSubTab === 'received' && !m.readAt;
+                return (
+                  <div key={m.id} className="card" style={{ marginBottom: '8px', borderLeft: isUnread ? '3px solid var(--rose)' : '3px solid transparent' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--rose)' }}>
+                        {isUnread && <span style={{ background: 'var(--rose)', color: 'white', borderRadius: '8px', padding: '1px 6px', fontSize: '10px', marginRight: '6px' }}>NEW</span>}
+                        {letterSubTab === 'received' ? `from. ${m.fromUser}` : `to. ${m.toUser || '상대방'}`}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text3)' }}>{dateStr}</div>
+                    </div>
+                    <div style={{ fontSize: '14px', color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{m.text}</div>
+                  </div>
+                );
+              })
+          }
+        </div>
+      );
     }
 
     // ── 통계 ──
@@ -619,6 +682,7 @@ export default function MyPage({
           { tab: 'dates',    label: '데이트 기록', count: allRequests.filter(r => r.status === '수락').length },
           { tab: 'diaries',  label: '일기',     count: allDiaries.length },
           { tab: 'stats',    label: '애정도',    count: null },
+          { tab: 'letters',  label: '쪽지',      count: allMessages.filter(m => m.isLetter && m.fromUser !== currentNick && !m.readAt).length || allMessages.filter(m => m.isLetter).length },
         ];
         return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
@@ -650,7 +714,7 @@ export default function MyPage({
             <div className="modal-bar" />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <div className="modal-title" style={{ margin: 0 }}>
-                {{ received: '💌 받은 신청', sent: '📤 보낸 신청', dates: '💕 데이트 기록', diaries: '📔 일기', stats: '📊 통계' }[myTab]}
+                {{ received: '💌 받은 신청', sent: '📤 보낸 신청', dates: '💕 데이트 기록', diaries: '📔 일기', stats: '📊 통계', letters: '✉️ 쪽지 보관함' }[myTab]}
               </div>
               <button onClick={() => setContentModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: 'var(--text3)', padding: '0 4px', lineHeight: 1 }}>×</button>
             </div>
@@ -661,10 +725,45 @@ export default function MyPage({
                 ))}
               </div>
             )}
+            {myTab === 'letters' && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                {(['received', 'sent'] as const).map(t => (
+                  <button key={t} onClick={() => setLetterSubTab(t)} style={{
+                    padding: '5px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    fontWeight: 700, fontSize: '12px',
+                    background: letterSubTab === t ? 'var(--rose)' : 'var(--border)',
+                    color: letterSubTab === t ? 'white' : 'var(--text2)',
+                  }}>{t === 'received' ? '받은 쪽지' : '보낸 쪽지'}</button>
+                ))}
+              </div>
+            )}
             <div style={{ flex: 1, overflowY: 'auto' }}>{renderContent()}</div>
           </div>
         </div>
       )}
+
+      {/* 쪽지 쓰기 모달 */}
+      <div className={'modal-bg' + (letterWriteOpen ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) setLetterWriteOpen(false); }}>
+        <div className="modal">
+          <div className="modal-bar" />
+          <div className="modal-title">쪽지 쓰기 ✉️</div>
+          <div className="form-group">
+            <label className="form-label">내용</label>
+            <textarea
+              className="form-input"
+              placeholder="전하고 싶은 말을 적어보세요..."
+              rows={6}
+              value={letterInput}
+              onChange={e => setLetterInput(e.target.value)}
+              style={{ resize: 'none', lineHeight: 1.7 }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn btn-outline btn-full" onClick={() => { setLetterWriteOpen(false); setLetterInput(''); }}>취소</button>
+            <button className="btn btn-rose btn-full" onClick={handleSendLetter}>보내기 💌</button>
+          </div>
+        </div>
+      </div>
 
       {/* 다른 방 입장 모달 */}
       <div className={'modal-bg' + (showJoinOtherModal ? ' open' : '')} onClick={e => { if (e.target === e.currentTarget) setShowJoinOtherModal(false); }}>

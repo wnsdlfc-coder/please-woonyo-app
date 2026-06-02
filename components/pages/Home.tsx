@@ -11,7 +11,7 @@ interface Request {
 }
 interface Diary { id: string; reqId?: string; date: string; title: string; content: string; star?: number; }
 interface Anniversary { id: string; name: string; date: string; emoji: string; repeat: boolean; targetDate?: string; }
-interface Message { id: string; fromUser: string; text: string; readAt: { seconds?: number } | null; createdAt: { seconds?: number } | null; }
+interface Message { id: string; fromUser: string; text: string; isLetter?: boolean; chatRoomId?: string; readAt: { seconds?: number } | null; createdAt: { seconds?: number } | null; }
 
 interface HomeProps {
   currentNick: string;
@@ -53,7 +53,8 @@ export default function Home({
   const incoming = pending.filter(r => r.toUser === currentNick);
   const upcoming = accepted.filter(r => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   const todayDate = accepted.find(r => r.date === today);
-  const unreadMsgCount = allMessages.filter(m => m.fromUser !== currentNick && !m.readAt).length;
+  const unreadMsgCount = allMessages.filter(m => m.chatRoomId && m.fromUser !== currentNick && !m.readAt).length;
+  const unreadLetterCount = allMessages.filter(m => m.isLetter && m.fromUser !== currentNick && !m.readAt).length;
   const noDiaryCount = accepted.filter(r => r.date < today && !allDiaries.some(d => d.reqId === r.id || d.date === r.date)).length;
 
   // D+Day 기준일 (localStorage 우선, 없으면 첫 데이트 날짜)
@@ -178,6 +179,21 @@ export default function Home({
             <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)' }}>{nextAnniversary.emoji} {nextAnniversary.name}</div>
           </div>
           <div style={{ fontSize: '22px', fontWeight: 900, color: '#7C3AED' }}>{getDday(nextAnniversary.targetDate || nextAnniversary.date, false)}</div>
+        </div>
+      )}
+
+      {/* ── 쪽지 알림 ── */}
+      {unreadLetterCount > 0 && (
+        <div
+          onClick={() => { onSwitchMyTab('letters'); onNavigate('my'); }}
+          style={{ background: 'linear-gradient(135deg,#FFF8E1,#FFF3CD)', border: '1.5px solid #F4C842', borderRadius: '14px', padding: '14px 16px', marginBottom: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' }}
+        >
+          <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>💌</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: '#92400E' }}>새 쪽지 {unreadLetterCount}개 도착!</div>
+            <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>마이페이지에서 확인해요</div>
+          </div>
+          <div style={{ fontSize: '14px', color: '#B45309' }}>→</div>
         </div>
       )}
 

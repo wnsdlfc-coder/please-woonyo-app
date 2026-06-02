@@ -31,19 +31,15 @@ export default function ChatRoomView({ room, currentNick, allMessages, onSendMes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allMessages, currentNick]);
 
-  // 자동삭제 타이머
+  // 자동삭제 타이머 — 읽은 시점부터 정확히 10초
   useEffect(() => {
     roomMessages
       .filter(m => m.selfDestruct && m.fromUser !== currentNick && m.readAt && !timerRefs.current[m.id])
       .forEach(m => {
-        const readSec = (m.readAt as { seconds?: number })?.seconds;
-        const readTime = readSec ? readSec * 1000 : Date.now();
-        const remaining = Math.max(0, 10000 - (Date.now() - readTime));
-        if (remaining <= 0) { deleteDoc(doc(db, 'notes', m.id)).catch(() => {}); return; }
-        setCountdowns(prev => ({ ...prev, [m.id]: Math.ceil(remaining / 1000) }));
+        setCountdowns(prev => ({ ...prev, [m.id]: 10 }));
         timerRefs.current[m.id] = setInterval(() => {
           setCountdowns(prev => {
-            const next = (prev[m.id] || 1) - 1;
+            const next = (prev[m.id] ?? 10) - 1;
             if (next <= 0) {
               clearInterval(timerRefs.current[m.id]);
               delete timerRefs.current[m.id];
