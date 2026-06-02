@@ -166,11 +166,11 @@ export default function PageRoot() {
         }
       }
     });
-    // 방문 횟수 기록 (이번 달)
+    // 방문 횟수 기록 — setDoc+merge로 폰/PC 모두 카운팅
     const monthKey = new Date().toISOString().slice(0, 7);
-    updateDoc(doc(db, 'rooms', code), {
-      [`visits.${nick}.${monthKey}`]: increment(1),
-    }).catch(() => {});
+    setDoc(doc(db, 'rooms', code), {
+      visits: { [nick]: { [monthKey]: increment(1) } },
+    }, { merge: true }).catch(() => {});
 
     loadAll(code); loadRoomMembers(code);
   }, [loadAll, loadRoomMembers, showToast]);

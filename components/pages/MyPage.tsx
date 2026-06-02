@@ -421,9 +421,9 @@ export default function MyPage({
         <div>
           {/* ── 이번 달 대결 ── */}
           <div className="card" style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '4px' }}>{monthLabel} 대결</div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.5px', marginBottom: '4px' }}>{monthLabel} 애정도</div>
             <div style={{ fontSize: '17px', fontWeight: 900, color: 'var(--text)', marginBottom: '6px' }}>
-              {roomTitle}의 이번 달 대장님은? 👑
+              {roomTitle}에서 더 좋아하는 사람은? 💕
             </div>
             {/* 범례 */}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '18px' }}>
@@ -449,13 +449,13 @@ export default function MyPage({
                   <div style={{ fontSize: '30px', marginBottom: '6px' }}>👑</div>
                   <div style={{ fontSize: '18px', fontWeight: 900, color: winner === currentNick ? '#5B9BD5' : 'var(--rose)' }}>{winner}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text3)', marginTop: '3px' }}>
-                    {monthLabel} 1등 · {winner === currentNick ? myTotal : ptTotal}점
+                    더 많이 좋아해요 💕
                   </div>
                 </>
               ) : (myTotal + ptTotal > 0) ? (
                 <>
                   <div style={{ fontSize: '28px', marginBottom: '6px' }}>🤝</div>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text2)' }}>이번 달은 동점!</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text2)' }}>서로 똑같이 좋아해요 💕</div>
                 </>
               ) : (
                 <div style={{ fontSize: '13px', color: 'var(--text3)' }}>이번 달 기록이 없어요</div>
@@ -618,7 +618,7 @@ export default function MyPage({
           { tab: 'sent',     label: '보낸 신청', count: allRequests.filter(r => r.fromUser === currentNick).length },
           { tab: 'dates',    label: '데이트 기록', count: allRequests.filter(r => r.status === '수락').length },
           { tab: 'diaries',  label: '일기',     count: allDiaries.length },
-          { tab: 'stats',    label: '통계',     count: null },
+          { tab: 'stats',    label: '애정도',    count: null },
         ];
         return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
