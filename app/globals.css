@@ -1,8 +1,8 @@
 :root {
-  --rose:#9B2335;--rose2:#B8395A;--rose3:#E8C5CF;--rose4:#F5EBE8;
-  --yellow:#C49A3C;--yellow2:#FDF6E3;--peach:#C0614A;
+  --rose:#C0354F;--rose2:#D45A72;--rose3:#F0CCCC;--rose4:#FDF0F0;
+  --yellow:#C49A3C;--yellow2:#FDF6E3;--peach:#D96B4A;
   --cream:#F5F0E6;--text:#2C1810;--text2:#6B5750;--text3:#A89B96;
-  --shadow:0 4px 20px rgba(155,35,53,0.15);--shadow2:0 1px 8px rgba(0,0,0,0.08);
+  --shadow:0 4px 20px rgba(192,53,79,0.18);--shadow2:0 1px 8px rgba(0,0,0,0.08);
   --bg:#F5F0E6;--border:#DDD5C8;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -87,8 +87,8 @@ textarea.form-input{resize:none;min-height:90px;line-height:1.6;}
 .del-btn{background:none;border:none;font-size:16px;cursor:pointer;color:var(--text3);transition:color 0.2s;}
 .del-btn:hover{color:var(--rose);}
 .add-row{display:flex;gap:8px;}
-.hero{background:linear-gradient(135deg,#9B2335 0%,#7A1A28 100%);border-radius:16px;padding:24px;margin-bottom:20px;color:white;position:relative;overflow:hidden;}
-.hero::after{content:'♡';font-size:100px;position:absolute;right:-10px;bottom:-20px;opacity:0.08;}
+.hero{background:linear-gradient(135deg,#D94070 0%,#B83060 60%,#9B2350 100%);border-radius:16px;padding:24px;margin-bottom:20px;color:white;position:relative;overflow:hidden;}
+.hero::after{content:'♡';font-size:100px;position:absolute;right:-10px;bottom:-20px;opacity:0.1;}
 .hero-greeting{font-size:13px;opacity:0.85;margin-bottom:4px;}
 .hero-name{font-size:22px;font-weight:800;margin-bottom:16px;}
 .hero-stats{display:flex;gap:20px;}

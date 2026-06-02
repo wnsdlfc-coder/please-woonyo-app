@@ -24,22 +24,21 @@ export default function AppBar({ currentNick, onLogout, roomTitle }: AppBarProps
 
   return (
     <div className="top-nav">
-      <div className="app-logo">
-        {/* 로고 이미지: public/logo.png 저장 시 자동 표시 */}
+      <div className="app-logo" style={{ gap: '10px' }}>
         <img
           src="/logo.png"
-          alt="플리즈 우뇨"
-          width={32}
-          height={32}
-          style={{ objectFit: 'contain', borderRadius: '4px' }}
+          alt="Please Woonyo"
+          width={30}
+          height={30}
+          style={{ objectFit: 'contain', borderRadius: '4px', flexShrink: 0 }}
           onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
         <div>
-          <div style={{ fontSize: '14px', fontWeight: 900, color: 'var(--rose)', letterSpacing: '-0.3px', lineHeight: 1.1, fontFamily: 'inherit' }}>
-            플리즈 우뇨
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.5px', lineHeight: 1 }}>
+            PLEASE WOONYO
           </div>
           {roomTitle && (
-            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.2px', lineHeight: 1.3 }}>
+            <div style={{ fontSize: '16px', fontWeight: 900, color: 'var(--rose)', letterSpacing: '-0.5px', lineHeight: 1.2, marginTop: '1px' }}>
               {roomTitle}
             </div>
           )}
