@@ -253,9 +253,11 @@ export default function MyPage({
     });
   };
   const handleReturn = (id: string) => {
-    showConfirm('수락한 신청을 반려할까요?', async () => {
-      await updateDoc(doc(db, 'requests', id), { status: '반려' });
-      showToast('반려했어요');
+    showConfirm('수락한 신청을 반려할까요?\n기록에서도 삭제됩니다.', async () => {
+      const schSnap = await getDocs(query(collection(db, 'schedules'), where('fromRequest', '==', id), where('roomId', '==', currentCoupleCode)));
+      await Promise.all(schSnap.docs.map(d => deleteDoc(doc(db, 'schedules', d.id))));
+      await deleteDoc(doc(db, 'requests', id));
+      showToast('반려하고 삭제했어요');
     });
   };
   const handleCancel = (id: string) => {
@@ -266,11 +268,14 @@ export default function MyPage({
   };
   const handleDeleteAccepted = (id: string) => {
     showConfirm('데이트 기록을 삭제할까요?\n연결된 일기는 남아 있어요.', async () => {
-      // 수락 시 자동 생성된 일정(fromRequest)도 함께 삭제
-      const schSnap = await getDocs(query(collection(db, 'schedules'), where('fromRequest', '==', id)));
-      await Promise.all(schSnap.docs.map(d => deleteDoc(doc(db, 'schedules', d.id))));
-      await deleteDoc(doc(db, 'requests', id));
-      showToast('삭제됐어요');
+      try {
+        const schSnap = await getDocs(query(collection(db, 'schedules'), where('fromRequest', '==', id), where('roomId', '==', currentCoupleCode)));
+        await Promise.all(schSnap.docs.map(d => deleteDoc(doc(db, 'schedules', d.id))));
+        await deleteDoc(doc(db, 'requests', id));
+        showToast('삭제됐어요');
+      } catch (e) {
+        showToast('삭제 실패: ' + (e as Error).message, true);
+      }
     });
   };
   const handleCheckItem = async (req: Request, idx: number) => {

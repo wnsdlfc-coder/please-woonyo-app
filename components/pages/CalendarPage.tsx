@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, serverTimestamp, updateDoc, getDocs, query, where } from 'firebase/firestore';
 import { getDday } from '@/lib/utils';
 import { arrayUnion } from 'firebase/firestore';
 
@@ -191,6 +191,18 @@ export default function CalendarPage({
     showToast('삭제됐어요');
   };
 
+  const handleDeleteReq = async (id: string) => {
+    if (!window.confirm('데이트 기록을 삭제할까요?')) return;
+    try {
+      const schSnap = await getDocs(query(collection(db, 'schedules'), where('fromRequest', '==', id), where('roomId', '==', currentCoupleCode)));
+      await Promise.all(schSnap.docs.map(d => deleteDoc(doc(db, 'schedules', d.id))));
+      await deleteDoc(doc(db, 'requests', id));
+      showToast('삭제됐어요');
+    } catch (e) {
+      showToast('삭제 실패', true);
+    }
+  };
+
   const handleSendComment = async (diaryId: string) => {
     const text = (commentInputs[diaryId] || '').trim();
     if (!text) return;
@@ -323,8 +335,13 @@ export default function CalendarPage({
           const diary = allDiaries.find(x => x.reqId === r.id);
           return (
             <div key={r.id} className="card" style={{ background: 'linear-gradient(135deg,#E4FFE4 0%,white 100%)', border: '1px solid rgba(150,230,150,0.3)', marginBottom: '8px' }}>
-              <div style={{ fontWeight: 700, fontSize: '15px' }}>{r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
-              <div style={{ fontSize: '13px', color: 'var(--text2)', marginTop: '4px' }}>{r.time} · {r.theme}{r.endDate ? ` · ~${r.endDate}` : ''}</div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: '15px' }}>{r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--text2)', marginTop: '4px' }}>{r.time} · {r.theme}{r.endDate ? ` · ~${r.endDate}` : ''}</div>
+                </div>
+                <button onClick={() => handleDeleteReq(r.id)} style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: 'var(--text3)', padding: '2px', flexShrink: 0 }}>🗑️</button>
+              </div>
               {diary ? (
                 <div style={{ marginTop: '10px', padding: '12px', background: 'var(--rose4)', borderRadius: '10px' }}>
                   <div style={{ fontWeight: 800, fontSize: '14px', marginBottom: '4px' }}>📔 {diary.title}</div>
