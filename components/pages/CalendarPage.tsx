@@ -121,11 +121,11 @@ export default function CalendarPage({
   });
 
   const scheduleDatesMap: Record<string, Schedule[]> = {};
-  allSchedules.forEach(s => {
+  allSchedules.filter(s => s.createdBy !== 'auto').forEach(s => {  // 데이트 수락 자동생성 일정 제외
     const cur = new Date(s.date + 'T00:00:00');
     const end = new Date((s.endDate || s.date) + 'T00:00:00');
     while (cur <= end) {
-      const key = cur.toISOString().split('T')[0];
+      const key = toDateStr(cur);  // UTC 버그 수정
       if (!scheduleDatesMap[key]) scheduleDatesMap[key] = [];
       scheduleDatesMap[key].push(s);
       cur.setDate(cur.getDate() + 1);
