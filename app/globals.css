@@ -171,7 +171,7 @@ textarea.form-input{resize:none;min-height:90px;line-height:1.6;}
 .map-wrap::-webkit-scrollbar{width:3px;height:3px;}
 .map-wrap::-webkit-scrollbar-thumb{background:transparent;border-radius:3px;}
 .map-wrap::-webkit-scrollbar-track{background:transparent;}
-.map-wrap svg{width:100%;height:auto;display:block;margin-top:-7%;}
+.map-wrap svg{width:100%;height:auto;display:block;transition:transform 0.1s ease-out;}
 .map-region{transition:filter 0.2s ease-out;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}
 .map-region:hover{filter:brightness(0.82);}
 .map-legend{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;justify-content:center;}
