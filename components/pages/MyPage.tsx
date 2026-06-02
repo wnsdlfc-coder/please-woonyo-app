@@ -264,6 +264,12 @@ export default function MyPage({
       showToast('신청이 취소됐어요');
     });
   };
+  const handleDeleteAccepted = (id: string) => {
+    showConfirm('데이트 기록을 삭제할까요?\n연결된 일기는 남아 있어요.', async () => {
+      await deleteDoc(doc(db, 'requests', id));
+      showToast('삭제됐어요');
+    });
+  };
   const handleCheckItem = async (req: Request, idx: number) => {
     const cl = (req.checklist || []).map((c, i) => i === idx ? { ...c, done: !c.done } : c);
     await updateDoc(doc(db, 'requests', req.id), { checklist: cl });
@@ -299,10 +305,13 @@ export default function MyPage({
           <button className="btn btn-rose btn-sm" onClick={() => handleAccept(r.id)}>수락 💕</button>
           <button className="btn btn-outline btn-sm" onClick={() => handleReject(r.id)}>거절</button>
         </div>
-      ) : r.status === '수락' && r.toUser === currentNick ? (
+      ) : (r.status === '수락' || r.status === 'accepted') ? (
         <div className="req-actions">
           {statusBadge(r.status)}
-          <button className="btn btn-outline btn-xs" style={{ marginLeft: '8px' }} onClick={() => handleReturn(r.id)}>반려</button>
+          {r.toUser === currentNick && (
+            <button className="btn btn-outline btn-xs" style={{ marginLeft: '8px' }} onClick={() => handleReturn(r.id)}>반려</button>
+          )}
+          <button className="btn btn-outline btn-xs" style={{ marginLeft: '6px', color: 'var(--text3)' }} onClick={() => handleDeleteAccepted(r.id)}>🗑️ 삭제</button>
         </div>
       ) : statusBadge(r.status)}
     </div>
@@ -368,8 +377,17 @@ export default function MyPage({
         const diary = allDiaries.find(x => x.reqId === r.id);
         return (
           <div key={r.id} className="date-card">
-            <div className="date-card-date">{r.date} {r.time}</div>
-            <div className="date-card-info">{THEME_EMOJI[r.theme] || ''} {r.theme} · {r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div className="date-card-date">{r.date} {r.time}</div>
+                <div className="date-card-info">{THEME_EMOJI[r.theme] || ''} {r.theme} · {r.region}{r.subLocation ? ' / ' + r.subLocation : ''}</div>
+              </div>
+              <button
+                onClick={() => handleDeleteAccepted(r.id)}
+                style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: 'var(--text3)', padding: '4px', lineHeight: 1, flexShrink: 0 }}
+                title="삭제"
+              >🗑️</button>
+            </div>
             {diary
               ? <div style={{ background: 'var(--rose4)', borderRadius: '10px', padding: '10px 12px', fontSize: '13px', color: 'var(--text2)', marginTop: '8px' }}>📔 {diary.title}</div>
               : <button className="btn btn-outline btn-sm btn-full" style={{ marginTop: '8px' }} onClick={() => onOpenDiary(r.id, r.date)}>일기 쓰기 📔</button>
